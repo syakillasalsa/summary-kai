@@ -76,6 +76,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($stmt->execute()) {
                 error_log("Insert success untuk uraian: $uraian | Nomor: $nomor");
+
+                // Resequence numbering after insert to fix duplicates and hierarchy
+                resequenceNumbering($conn, $kategori, $parent_id);
+
                 $redirectUrl = "laporan.php?kategori=" . urlencode($kategori);
                 $bulan = $_POST['bulan'] ?? '';
                 $tahun = $_POST['tahun'] ?? '';

@@ -5,16 +5,10 @@ include 'numbering_service.php';
 $categories = [
     'pendapatan' => 'Pendapatan',
     'beban' => 'Beban',
-    'laba rugi usaha' => 'Laba Rugi Usaha',
-    'pendapatan beban lain lain' => 'Pendapatan Beban Lain Lain',
-    'laba rugi sebelum pajak penghasilan' => 'Laba Rugi Sebelum Pajak Penghasilan',
-    'pajak penghasilan' => 'Pajak Penghasilan',
-    'laba rugi bersih tahun berjalan' => 'Laba Rugi Bersih Tahun Berjalan',
-    'kepentingan non pengendali' => 'Kepentingan Non Pengendali',
-    'laba yang dapat diatribusikan kepada pemilik entitas induk' => 'Laba yang Dapat Diatribusikan kepada Pemilik Entitas Induk'
+    'laba rugi usaha' => 'Laba Rugi Usaha'
 ];
 
-$kategori = $_GET['kategori'] ?? 'pendapatan';
+$kategori = $_GET['kategori'] ?? '';
 $bulan = $_GET['bulan'] ?? '';
 $tahun = $_GET['tahun'] ?? '';
 $search = $_GET['search'] ?? '';
@@ -26,10 +20,23 @@ $whereClauses = [];
 $params = [];
 $paramTypes = '';
 
-if ($kategori !== 'all') {
+$allowedCategories = ['pendapatan', 'beban', 'laba rugi usaha'];
+
+if ($kategori !== '' && $kategori !== 'all') {
     $whereClauses[] = 'kategori = ?';
     $params[] = $kategori;
     $paramTypes .= 's';
+} else if ($kategori === 'all') {
+    // When 'all' is selected, filter only allowed categories
+    $placeholders = implode(',', array_fill(0, count($allowedCategories), '?'));
+    $whereClauses[] = "kategori IN ($placeholders)";
+    foreach ($allowedCategories as $cat) {
+        $params[] = $cat;
+        $paramTypes .= 's';
+    }
+} else if ($kategori === '') {
+    // No category selected, return no data
+    $whereClauses[] = '1=0';
 }
 
 if ($bulan !== '') {
@@ -108,7 +115,7 @@ while ($row = $result->fetch_assoc()) {
     $laporanData[] = $row;
 }
 
-$tree = $laporanData; // No tree structure, flat list
+$tree = buildTree($laporanData); // Build hierarchical tree structure from flat list
 ?>
 
 <?php include 'header.php'; ?>
@@ -124,30 +131,32 @@ $tree = $laporanData; // No tree structure, flat list
         </nav>
     </div>
     <div class="card p-3" style="padding: 30px; margin-bottom: 20px;">
-        <h5>Laporan - <?= htmlspecialchars($kategori === 'all' ? 'Semua Kategori' : $categories[$kategori]) ?></h5>
+        <h5>Laporan - <?= htmlspecialchars($kategori === '' ? 'Pilih Kategori' : ($kategori === 'all' ? 'Semua Kategori' : ($categories[$kategori] ?? ''))) ?></h5>
+        <style>
+            #kategoriSelect {
+                min-width: 200px !important;
+            }
+        </style>
         <form method="GET" class="mb-3 row g-2 align-items-center">
-            <div class="col-auto">
-                <label class="input-group-text" for="kategoriSelect">Pilih Kategori</label>
-                <select class="form-select" id="kategoriSelect" name="kategori" onchange="this.form.submit()">
+            <div class="col-auto d-flex align-items-center">
+                <select class="form-select me-3" id="kategoriSelect" name="kategori" onchange="this.form.submit()" aria-label="Pilih Kategori">
+                    <option value="" <?= ($kategori === '') ? 'selected' : '' ?>>Pilih Kategori</option>
                     <option value="all" <?= ($kategori === 'all') ? 'selected' : '' ?>>Tampilkan Semua</option>
                     <?php foreach ($categories as $key => $label): ?>
                         <option value="<?= htmlspecialchars($key) ?>" <?= ($key === $kategori) ? 'selected' : '' ?>><?= htmlspecialchars($label) ?></option>
                     <?php endforeach; ?>
                 </select>
-            </div>
-            <div class="col-auto">
-                <label class="input-group-text" for="bulanSelect">Bulan</label>
-                <select class="form-select" id="bulanSelect" name="bulan" onchange="this.form.submit()">
+
+                <select class="form-select me-3" id="bulanSelect" name="bulan" onchange="this.form.submit()" aria-label="Pilih Bulan">
+                    <option value="" disabled selected>Bulan</option>
                     <option value="">Semua</option>
                     <?php for ($m=1; $m<=12; $m++): ?>
                         <option value="<?= $m ?>" <?= ($bulan == $m) ? 'selected' : '' ?>><?= date('F', mktime(0,0,0,$m,1)) ?></option>
                     <?php endfor; ?>
                 </select>
-            </div>
-            <div class="col-auto">
-                <label class="input-group-text" for="tahunSelect">Tahun</label>
-                <select class="form-select" id="tahunSelect" name="tahun" onchange="this.form.submit()">
-                    <option value="">Semua</option>
+
+                <select class="form-select me-3" id="tahunSelect" name="tahun" onchange="this.form.submit()" aria-label="Pilih Tahun">
+                    <option value="" disabled selected>Tahun</option>
                     <?php
                     $currentYear = date('Y');
                     for ($y = $currentYear - 5; $y <= $currentYear + 1; $y++): ?>
@@ -305,22 +314,23 @@ $tree = $laporanData; // No tree structure, flat list
                 ];
             }
 
-            if ($kategori === 'all' || $kategori === 'laba rugi sebelum pajak penghasilan') {
-                $labaRugiUsahaRealisasiLalu = getTotalByKategori($conn, 'laba rugi usaha', 'REALISASI_TAHUN_LALU');
-                $pendapatanBebanLainLainRealisasiLalu = getTotalByKategori($conn, 'pendapatan beban lain lain', 'REALISASI_TAHUN_LALU');
-                $labaRugiUsahaRealisasiIni = getTotalByKategori($conn, 'laba rugi usaha', 'REALISASI_TAHUN_INI');
-                $pendapatanBebanLainLainRealisasiIni = getTotalByKategori($conn, 'pendapatan beban lain lain', 'REALISASI_TAHUN_INI');
-                $labaRugiUsahaAnggaranIni = getTotalByKategori($conn, 'laba rugi usaha', 'ANGGARAN_TAHUN_INI');
-                $pendapatanBebanLainLainAnggaranIni = getTotalByKategori($conn, 'pendapatan beban lain lain', 'ANGGARAN_TAHUN_INI');
+            // Removed block for 'laba rugi sebelum pajak penghasilan' and related categories to fix warnings
+            // if ($kategori === 'all' || $kategori === 'laba rugi sebelum pajak penghasilan') {
+            //     $labaRugiUsahaRealisasiLalu = getTotalByKategori($conn, 'laba rugi usaha', 'REALISASI_TAHUN_LALU');
+            //     $pendapatanBebanLainLainRealisasiLalu = getTotalByKategori($conn, 'pendapatan beban lain lain', 'REALISASI_TAHUN_LALU');
+            //     $labaRugiUsahaRealisasiIni = getTotalByKategori($conn, 'laba rugi usaha', 'REALISASI_TAHUN_INI');
+            //     $pendapatanBebanLainLainRealisasiIni = getTotalByKategori($conn, 'pendapatan beban lain lain', 'REALISASI_TAHUN_INI');
+            //     $labaRugiUsahaAnggaranIni = getTotalByKategori($conn, 'laba rugi usaha', 'ANGGARAN_TAHUN_INI');
+            //     $pendapatanBebanLainLainAnggaranIni = getTotalByKategori($conn, 'pendapatan beban lain lain', 'ANGGARAN_TAHUN_INI');
 
-                $totalsLabaRugiSebelumPajak = [
-                    'totalRealisasiTahunLalu' => $labaRugiUsahaRealisasiLalu - $pendapatanBebanLainLainRealisasiLalu,
-                    'totalRealisasiTahunIni' => $labaRugiUsahaRealisasiIni - $pendapatanBebanLainLainRealisasiIni,
-                    'totalAnggaranTahunIni' => $labaRugiUsahaAnggaranIni - $pendapatanBebanLainLainAnggaranIni,
-                    'totalAnggaranTahun2025' => 0,
-                    'totalAnalisisVertical' => 0,
-                ];
-            }
+            //     $totalsLabaRugiSebelumPajak = [
+            //         'totalRealisasiTahunLalu' => $labaRugiUsahaRealisasiLalu - $pendapatanBebanLainLainRealisasiLalu,
+            //         'totalRealisasiTahunIni' => $labaRugiUsahaRealisasiIni - $pendapatanBebanLainLainRealisasiIni,
+            //         'totalAnggaranTahunIni' => $labaRugiUsahaAnggaranIni - $pendapatanBebanLainLainAnggaranIni,
+            //         'totalAnggaranTahun2025' => 0,
+            //         'totalAnalisisVertical' => 0,
+            //     ];
+            // }
 
             $currentKategori = null;
             foreach ($tree as $node):
@@ -404,6 +414,7 @@ $tree = $laporanData; // No tree structure, flat list
             endforeach;
         ?>
             <tr class="table-secondary fw-bold">
+                <td></td>
                 <td>Jumlah <?= htmlspecialchars($categories[$currentKategori]) ?></td>
                 <td><?= number_format($totals['totalRealisasiTahunLalu'], 2, ',', '.') ?></td>
                 <td><?= number_format($totals['totalAnggaranTahunIni'], 2, ',', '.') ?></td>
@@ -442,4 +453,3 @@ document.addEventListener('DOMContentLoaded', function() {
 <?php include 'footer.php'; ?>
 <script src="assets/js/sidebar-accordion.js"></script>
 <script src="assets/js/main.js"></script>
-
