@@ -454,7 +454,7 @@ foreach ($laporanData as $data) {
             </div>
         </form>
 
-        <div id="chartsContainer">
+        <!-- <div id="chartsContainer">
             <div id="pendapatanChart" class="chart"></div>
             <div id="bebanChart" class="chart"></div>
         </div>
@@ -511,7 +511,7 @@ foreach ($laporanData as $data) {
                     bebanChart.resize();
                 });
             });
-        </script>
+        </script> -->
 
         <table class="table table-bordered table-striped table-hover">
             <thead class="table-dark">
