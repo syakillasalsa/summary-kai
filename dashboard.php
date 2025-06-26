@@ -576,6 +576,7 @@ $resultDetailInvestasi = $conn->query($sqlDetailInvestasi);
 
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 <script src="assets/js/main.js"></script>
 <script src="assets/js/sidebar-accordion.js"></script>
 <script>
@@ -598,14 +599,14 @@ function createBarChart(ctx, labels, dataRealisasi, dataAnggaran, labelRealisasi
                     data: dataRealisasi,
                     backgroundColor: colorRealisasi,
                     borderRadius: 4,
-                    barPercentage: 0.4,
+                    barPercentage: 0.6,
                 },
                 {
                     label: labelAnggaran,
                     data: dataAnggaran,
                     backgroundColor: colorAnggaran,
                     borderRadius: 4,
-                    barPercentage: 0.4,
+                    barPercentage: 0.6,
                 }
             ]
         },
@@ -613,6 +614,20 @@ function createBarChart(ctx, labels, dataRealisasi, dataAnggaran, labelRealisasi
             responsive: true,
             plugins: {
                 tooltip: { enabled: true },
+                datalabels: {
+                    display: true,
+                    color: 'black',
+                    anchor: 'end',
+                    align: 'top',
+                    offset: -4,
+                    formatter: function(value) {
+                        return Math.round(value);
+                    },
+                    font: {
+                        weight: 'bold',
+                        size: 12
+                    }
+                },
                 subtitle: {
                     display: (totalRealisasi !== null && totalAnggaran !== null),
                     text: totalRealisasi !== null && totalAnggaran !== null ? 
@@ -627,7 +642,7 @@ function createBarChart(ctx, labels, dataRealisasi, dataAnggaran, labelRealisasi
                 }
             },
             scales: {
-                y: { beginAtZero: true },
+                y: { beginAtZero: true, display: false },
                 x: {
                     ticks: {
                         font: {
@@ -638,6 +653,7 @@ function createBarChart(ctx, labels, dataRealisasi, dataAnggaran, labelRealisasi
             },
             plugins: {
                 legend: {
+                    display: false,
                     labels: {
                         font: {
                             size: 10
@@ -645,7 +661,8 @@ function createBarChart(ctx, labels, dataRealisasi, dataAnggaran, labelRealisasi
                     }
                 }
             }
-        }
+        },
+        plugins: [ChartDataLabels]
     });
     if (chartId) {
         chartInstances[chartId] = newChart;
