@@ -375,6 +375,24 @@ foreach ($whereClausesNextYear as $i => $clause) {
 
 <?php include 'header.php'; ?>
 
+<?php
+// Prepare chart data for pendapatan and beban
+$labelsPendapatan = [];
+$valuesPendapatan = [];
+$labelsBeban = [];
+$valuesBeban = [];
+
+foreach ($laporanData as $data) {
+    if ($data['kategori'] === 'pendapatan') {
+        $labelsPendapatan[] = $data['Uraian'];
+        $valuesPendapatan[] = $data['REALISASI_TAHUN_INI'];
+    } elseif ($data['kategori'] === 'beban') {
+        $labelsBeban[] = $data['Uraian'];
+        $valuesBeban[] = $data['REALISASI_TAHUN_INI'];
+    }
+}
+?>
+
 <main id="main" class="main">
     <div class="pagetitle">
         <h1>Laporan Keuangan</h1>
@@ -390,6 +408,15 @@ foreach ($whereClausesNextYear as $i => $clause) {
         <style>
             #kategoriSelect {
                 min-width: 200px !important;
+            }
+            #chartsContainer {
+                display: flex;
+                gap: 20px;
+                margin-bottom: 30px;
+            }
+            .chart {
+                width: 45%;
+                height: 400px;
             }
         </style>
         <form method="GET" class="mb-3 row g-2 align-items-center">
@@ -426,23 +453,64 @@ foreach ($whereClausesNextYear as $i => $clause) {
                 <button type="submit" class="btn btn-primary">Filter</button>
             </div>
         </form>
-        <div class="col-md">
-            <?php if ($kategori !== 'all'): ?>
-                <a href="tambahlaporan.php?kategori=<?= urlencode($kategori) ?>" class="btn btn-success my-3">+ Tambah Data</a>
-            <?php endif; ?>
-            <a href="export_laporan.php?<?= http_build_query(['kategori' => $kategori, 'bulan' => $bulan, 'tahun' => $tahun, 'search' => $search]) ?>" class="btn btn-info my-3 ms-2">Download XLS</a>
-            <button onclick="printTable()" class="btn btn-secondary my-3 ms-2">Cetak</button>
+
+        <div id="chartsContainer">
+            <div id="pendapatanChart" class="chart"></div>
+            <div id="bebanChart" class="chart"></div>
         </div>
 
+        <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.2/dist/echarts.min.js"></script>
         <script>
-        function printTable() {
-            const originalContents = document.body.innerHTML;
-            const tableContents = document.querySelector('table').outerHTML;
-            document.body.innerHTML = '<html><head><title>Cetak Laporan</title><style>table {width: 100%; border-collapse: collapse;} th, td {border: 1px solid #000; padding: 8px; text-align: left;} th {background-color: #f2f2f2;}</style></head><body>' + tableContents + '</body></html>';
-            window.print();
-            document.body.innerHTML = originalContents;
-            location.reload();
-        }
+            document.addEventListener('DOMContentLoaded', function() {
+                var pendapatanChart = echarts.init(document.getElementById('pendapatanChart'));
+                var bebanChart = echarts.init(document.getElementById('bebanChart'));
+
+                var pendapatanOption = {
+                    title: {
+                        text: 'Pendapatan',
+                        left: 'center'
+                    },
+                    tooltip: {},
+                    xAxis: {
+                        type: 'category',
+                        data: <?= json_encode($labelsPendapatan) ?>
+                    },
+                    yAxis: {
+                        type: 'value'
+                    },
+                    series: [{
+                        data: <?= json_encode($valuesPendapatan) ?>,
+                        type: 'bar'
+                    }]
+                };
+
+                var bebanOption = {
+                    title: {
+                        text: 'Beban',
+                        left: 'center'
+                    },
+                    tooltip: {},
+                    xAxis: {
+                        type: 'category',
+                        data: <?= json_encode($labelsBeban) ?>
+                    },
+                    yAxis: {
+                        type: 'value'
+                    },
+                    series: [{
+                        data: <?= json_encode($valuesBeban) ?>,
+                        type: 'bar'
+                    }]
+                };
+
+                pendapatanChart.setOption(pendapatanOption);
+                bebanChart.setOption(bebanOption);
+
+                window.addEventListener('resize', function() {
+                    pendapatanChart.resize();
+                    bebanChart.resize();
+                });
+            });
         </script>
 
         <table class="table table-bordered table-striped table-hover">
