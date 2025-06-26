@@ -34,9 +34,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $uraian = $_POST['uraian'] ?? '';
     $wbs = $_POST['wbs'] ?? '';
     $lokasi_pengadaan = $_POST['lokasi_pengadaan'] ?? '';
-    $volume_satuan = $_POST['volume_satuan'] ?? '';
-    $harga_satuan = $_POST['harga_satuan'] ?? 0;
-    $jumlah_dana = $_POST['jumlah_dana'] ?? 0;
     $budget_tahun_2024 = $_POST['budget_tahun_2024'] ?? 0;
     $tambahan_dana = $_POST['tambahan_dana'] ?? 0;
     $total_tahun_2024 = $_POST['total_tahun_2024'] ?? 0;
@@ -57,8 +54,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (empty($errors)) {
-        $stmt = $conn->prepare("UPDATE investasi SET no=?, uraian=?, wbs=?, lokasi_pengadaan=?, volume_satuan=?, harga_satuan=?, jumlah_dana=?, budget_tahun_2024=?, tambahan_dana=?, total_tahun_2024=?, commitment=?, actual=?, consumed_budget=?, available_budget=?, progres_saat_ini=?, tanggal_kontrak=?, no_kontrak=?, nilai_kontrak=?, ket=?, input_date=? WHERE id=?");
-        $stmt->bind_param("issssddddddddddssdssi", $no, $uraian, $wbs, $lokasi_pengadaan, $volume_satuan, $harga_satuan, $jumlah_dana, $budget_tahun_2024, $tambahan_dana, $total_tahun_2024, $commitment, $actual, $consumed_budget, $available_budget, $progres_saat_ini, $tanggal_kontrak, $no_kontrak, $nilai_kontrak, $ket, $input_date, $id);
+        $stmt = $conn->prepare("UPDATE investasi SET no=?, uraian=?, wbs=?, lokasi_pengadaan=?,budget_tahun_2024=?, tambahan_dana=?, total_tahun_2024=?, commitment=?, actual=?, consumed_budget=?, available_budget=?, progres_saat_ini=?, tanggal_kontrak=?, no_kontrak=?, nilai_kontrak=?, ket=?, input_date=? WHERE id=?");
+        $stmt->bind_param("issssddddddddddssdssi", $no, $uraian, $wbs, $lokasi_pengadaan, $budget_tahun_2024, $tambahan_dana, $total_tahun_2024, $commitment, $actual, $consumed_budget, $available_budget, $progres_saat_ini, $tanggal_kontrak, $no_kontrak, $nilai_kontrak, $ket, $input_date, $id);
         $stmt->execute();
         $stmt->close();
 
@@ -112,19 +109,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
     <div class="mb-3">
         <label for="lokasi_pengadaan" class="form-label">LOKASI PENGADAAN</label>
-        <input type="text" class="form-control" id="lokasi_pengadaan" name="lokasi_pengadaan" value="<?= htmlspecialchars($_POST['lokasi_pengadaan'] ?? $data['lokasi_pengadaan']) ?>">
-    </div>
-    <div class="mb-3">
-        <label for="volume_satuan" class="form-label">VOLUME & SATUAN</label>
-        <input type="text" class="form-control" id="volume_satuan" name="volume_satuan" value="<?= htmlspecialchars($_POST['volume_satuan'] ?? $data['volume_satuan']) ?>">
-    </div>
-    <div class="mb-3">
-        <label for="harga_satuan" class="form-label">HARGA SATUAN (Rp)</label>
-        <input type="number" step="0.01" class="form-control" id="harga_satuan" name="harga_satuan" value="<?= htmlspecialchars($_POST['harga_satuan'] ?? $data['harga_satuan']) ?>">
-    </div>
-    <div class="mb-3">
-        <label for="jumlah_dana" class="form-label">JUMLAH DANA (Rp)</label>
-        <input type="number" step="0.01" class="form-control bg-light" id="jumlah_dana" name="jumlah_dana" value="<?= htmlspecialchars($_POST['jumlah_dana'] ?? $data['jumlah_dana']) ?>" readonly>
+        <input type="text" readonly class="form-control bg-light text-secondary" id="lokasi_pengadaan" name="lokasi_pengadaan" value="Daop 6 YK">
     </div>
     <div class="mb-3">
         <label for="budget_tahun_2024" class="form-label">BUDGET TAHUN 2024 (Rp)</label>
@@ -191,19 +176,15 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function calculateFields() {
-        var volumeSatuan = parseNumber(document.getElementById('volume_satuan').value);
-        var hargaSatuan = parseNumber(document.getElementById('harga_satuan').value);
         var budgetTahun = parseNumber(document.getElementById('budget_tahun_2024').value);
         var tambahanDana = parseNumber(document.getElementById('tambahan_dana').value);
         var commitment = parseNumber(document.getElementById('commitment').value);
         var actual = parseNumber(document.getElementById('actual').value);
 
-        var jumlahDana = volumeSatuan * hargaSatuan;
         var totalTahun = budgetTahun + tambahanDana;
         var consumedBudget = commitment + actual;
         var availableBudget = totalTahun - consumedBudget;
 
-        document.getElementById('jumlah_dana').value = jumlahDana.toFixed(2);
         document.getElementById('total_tahun_2024').value = totalTahun.toFixed(2);
         document.getElementById('consumed_budget').value = consumedBudget.toFixed(2);
         document.getElementById('available_budget').value = availableBudget.toFixed(2);

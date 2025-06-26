@@ -22,13 +22,13 @@ if (!$id) {
 
 $errors = [];
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $kategori = $_POST['kategori'] ?? 'pendapatan';
-    $uraian = $_POST['uraian'] ?? '';
-    $realisasi_tahun_lalu = $_POST['realisasi_tahun_lalu'] ?? 0;
-    $anggaran_tahun_ini = $_POST['anggaran_tahun_ini'] ?? 0;
-    $realisasi_tahun_ini = $_POST['realisasi_tahun_ini'] ?? 0;
-    $anggaran_tahun_2025 = $_POST['anggaran_tahun_2025'] ?? 0;
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $kategori = $_POST['kategori'] ?? 'pendapatan';
+        $uraian = $_POST['uraian'] ?? '';
+        $realisasi_tahun_lalu = $_POST['realisasi_tahun_lalu'] ?? 0;
+        $anggaran_tahun_ini = $_POST['anggaran_tahun_ini'] ?? 0;
+        $realisasi_tahun_ini = $_POST['realisasi_tahun_ini'] ?? 0;
+        $anggaran_per_tahun = $_POST['anggaran_per_tahun'] ?? 0;
 
     // Ambil parent_id dari database agar tidak berubah
     $stmtParent = $conn->prepare("SELECT parent_id FROM laporan WHERE id = ?");
@@ -56,13 +56,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt = $conn->prepare("UPDATE laporan 
             SET kategori=?, Uraian=?, parent_id=?, nomor=?, 
                 REALISASI_TAHUN_LALU=?, ANGGARAN_TAHUN_INI=?, 
-                REALISASI_TAHUN_INI=?, ANGGARAN_TAHUN_2025=? 
+                REALISASI_TAHUN_INI=?, ANGGARAN_PER_TAHUN=? 
             WHERE id=?");
 
         $parent_id = $parent_id === null ? 0 : (int)$parent_id;
         $stmt->bind_param("ssissdddi", $kategori, $uraian, $parent_id, $nomor,
             $realisasi_tahun_lalu, $anggaran_tahun_ini, $realisasi_tahun_ini,
-            $anggaran_tahun_2025, $id);
+            $anggaran_per_tahun, $id);
 
         if ($stmt->execute()) {
             header("Location: laporan.php?kategori=" . urlencode($kategori));
@@ -88,7 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $realisasi_tahun_lalu = $row['REALISASI_TAHUN_LALU'];
     $anggaran_tahun_ini = $row['ANGGARAN_TAHUN_INI'];
     $realisasi_tahun_ini = $row['REALISASI_TAHUN_INI'];
-    $anggaran_tahun_2025 = $row['ANGGARAN_TAHUN_2025'];
+    $anggaran_per_tahun = $row['ANGGARAN_PER_TAHUN'];
     $stmt->close();
 }
 ?>
@@ -150,8 +150,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
 
             <div class="mb-3">
-                <label for="anggaran_tahun_2025" class="form-label">ANGGARAN TAHUN 2025</label>
-                <input type="number" step="0.01" class="form-control" id="anggaran_tahun_2025" name="anggaran_tahun_2025" value="<?= htmlspecialchars($anggaran_tahun_2025) ?>">
+                <label for="anggaran_per_tahun" class="form-label">ANGGARAN PER TAHUN</label>
+                <input type="number" step="0.01" class="form-control" id="anggaran_per_tahun" name="anggaran_per_tahun" value="<?= htmlspecialchars($anggaran_per_tahun) ?>">
             </div>
 
             <button type="submit" class="btn btn-success">Simpan Perubahan</button>

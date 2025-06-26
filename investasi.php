@@ -76,7 +76,7 @@ if (count($params) > 0) {
     </div>
 <form method="GET" class="row g-3 mb-3" action="investasi.php">
     
-    <div class="col-md-3">
+    <div class="col-md-2" style="max-width: 150px;">
         <label for="bulan" class="form-label"></label>
         <select name="bulan" id="bulan" class="form-select">
             <option value="0">Semua Bulan</option>
@@ -88,7 +88,7 @@ if (count($params) > 0) {
             ?>
         </select>
     </div>
-    <div class="col-md-3">
+    <div class="col-md-2" style="max-width: 150px;">
         <label for="tahun" class="form-label"></label>
         <select name="tahun" id="tahun" class="form-select">
             <option value="0">Semua Tahun</option>
@@ -127,16 +127,13 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-<table class="table table-bordered table-striped align-middle text-center">
-    <thead class="table-light">
+<table class="table table-bordered table-striped align-middle text-center" style="background-color: white;">
+    <thead class="table-light" style="background-color: #f8f9fa;">
         <tr>
             <th>NO</th>
             <th>URAIAN</th>
             <th>WBS</th>
             <th>LOKASI PENGADAAN</th>
-            <th>VOLUME & SATUAN</th>
-            <th>HARGA SATUAN (Rp)</th>
-            <th>JUMLAH DANA (Rp)</th>
             <th>BUDGET TAHUN 2024 (Rp)</th>
             <th>TAMBAHAN DANA (Rp)</th>
             <th>TOTAL TAHUN 2024 (Rp)</th>
@@ -152,7 +149,7 @@ document.addEventListener('DOMContentLoaded', function() {
             <th>Aksi</th>
         </tr>
     </thead>
-        <tbody>
+        <tbody style="background-color: #ffffff;">
         <?php
         $total_jumlah_dana = 0;
         $total_budget_tahun_2024 = 0;
@@ -164,28 +161,23 @@ document.addEventListener('DOMContentLoaded', function() {
         $total_available_budget = 0;
         $loopIndex = 1;
         while ($row = $result->fetch_assoc()):
-            $calculated_jumlah_dana = floatval($row['volume_satuan']) * floatval($row['harga_satuan']);
-            $calculated_total_tahun_2024 = floatval($row['budget_tahun_2024']) + floatval($row['tambahan_dana']);
-            $calculated_consumed_budget = floatval($row['commitment']) + floatval($row['actual']);
-            $calculated_available_budget = $calculated_total_tahun_2024 - $calculated_consumed_budget;
-
-            $total_jumlah_dana += $calculated_jumlah_dana;
-            $total_budget_tahun_2024 += floatval($row['budget_tahun_2024']);
-            $total_tambahan_dana += floatval($row['tambahan_dana']);
-            $total_total_tahun_2024 += $calculated_total_tahun_2024;
-            $total_commitment += floatval($row['commitment']);
-            $total_actual += floatval($row['actual']);
-            $total_consumed_budget += $calculated_consumed_budget;
-            $total_available_budget += $calculated_available_budget;
+        $calculated_total_tahun_2024 = floatval($row['budget_tahun_2024']) + floatval($row['tambahan_dana']);
+        $calculated_consumed_budget = floatval($row['commitment']) + floatval($row['actual']);
+        $calculated_available_budget = $calculated_total_tahun_2024 - $calculated_consumed_budget;
+        $total_budget_tahun_2024 += floatval($row['budget_tahun_2024']);
+        $total_tambahan_dana += floatval($row['tambahan_dana']);
+        $total_total_tahun_2024 += $calculated_total_tahun_2024;
+        $total_commitment += floatval($row['commitment']);
+        $total_actual += floatval($row['actual']);
+        $total_consumed_budget += $calculated_consumed_budget;
+        $total_available_budget += $calculated_available_budget;
         ?>
-        <tr>
+        <tr style="background-color: #ffffff;">
             <td><?= htmlspecialchars($row['no']) ?></td>
             <td class="text-start"><?= htmlspecialchars($row['uraian']) ?></td>
             <td><?= htmlspecialchars($row['wbs']) ?></td>
             <td><?= htmlspecialchars($row['lokasi_pengadaan']) ?></td>
-            <td><?= htmlspecialchars($row['volume_satuan']) ?></td>
-            <td class="text-end"><?= number_format($row['harga_satuan'], 2) ?></td>
-            <td class="text-end"><?= number_format($calculated_jumlah_dana, 2) ?></td>
+            
             <td class="text-end"><?= number_format($row['budget_tahun_2024'], 2) ?></td>
             <td class="text-end"><?= number_format($row['tambahan_dana'], 2) ?></td>
             <td class="text-end"><?= number_format($calculated_total_tahun_2024, 2) ?></td>
@@ -207,11 +199,10 @@ document.addEventListener('DOMContentLoaded', function() {
         </tbody>
         <tfoot>
             <tr style="font-weight: bold; background-color: #f0f0f0;">
-                <td colspan="6" class="text-end">Jumlah</td>
-                <td class="text-end"><?= number_format($total_jumlah_dana, 2) ?></td>
-                <td class="text-end"><?= number_format($total_budget_tahun_2024, 2) ?></td>
-                <td class="text-end"><?= number_format($total_tambahan_dana, 2) ?></td>
-                <td class="text-end"><?= number_format($total_total_tahun_2024, 2) ?></td>
+            <td colspan="3" class="text-end">Jumlah</td>
+            <td class="text-end"><?= number_format($total_budget_tahun_2024, 2) ?></td>
+            <td class="text-end"><?= number_format($total_tambahan_dana, 2) ?></td>
+            <td class="text-end"><?= number_format($total_total_tahun_2024, 2) ?></td>
                 <td class="text-end"><?= number_format($total_commitment, 2) ?></td>
                 <td class="text-end"><?= number_format($total_actual, 2) ?></td>
                 <td class="text-end"><?= number_format($total_consumed_budget, 2) ?></td>
@@ -225,6 +216,7 @@ document.addEventListener('DOMContentLoaded', function() {
  <a href="#" class="back-to-top d-flex align-items-center justify-content-center"><i class="bi bi-arrow-up-short"></i></a>
 
 </main>
+<script src="assets/js/sidebar-accordion.js"></script>
 <script src="assets/js/main.js"></script>
 <?php include 'footer.php'; ?>
 

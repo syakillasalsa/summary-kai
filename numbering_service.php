@@ -31,7 +31,7 @@ function incrementLetterSuffix($suffix) {
     return $prefix . $nextChar . str_repeat('A', strlen($suffix) - $i - 1);
 }
 
-function resequenceNumbering($conn, $kategori, $parent_id = null) {
+function resequenceNumbering($conn, $kategori, $bulan = null, $tahun = null, $parent_id = null) {
     $stack = [];
     if ($parent_id === null) {
         $stack[] = [null, '', 1];
@@ -53,8 +53,25 @@ function resequenceNumbering($conn, $kategori, $parent_id = null) {
         list($currentParentId, $parentNomor, $mode) = array_pop($stack);
 
         if ($currentParentId === null) {
-            $stmt = $conn->prepare("SELECT id FROM laporan WHERE kategori = ? AND (parent_id IS NULL OR parent_id = 0) ORDER BY id ASC");
-            $stmt->bind_param("s", $kategori);
+            $sql = "SELECT id FROM laporan WHERE kategori = ? AND (parent_id IS NULL OR parent_id = 0)";
+            $params = [$kategori];
+            $types = "s";
+
+            if ($bulan !== null) {
+                $sql .= " AND bulan = ?";
+                $params[] = $bulan;
+                $types .= "i";
+            }
+            if ($tahun !== null) {
+                $sql .= " AND tahun = ?";
+                $params[] = $tahun;
+                $types .= "i";
+            }
+
+            $sql .= " ORDER BY id ASC";
+
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param($types, ...$params);
         } else {
             $stmt = $conn->prepare("SELECT id FROM laporan WHERE parent_id = ? ORDER BY id ASC");
             $stmt->bind_param("i", $currentParentId);

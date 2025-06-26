@@ -2,76 +2,161 @@
 include 'koneksi.php';
 include 'numbering_service.php';
 
+// Inisialisasi variabel filter dari query string dengan nilai default
+$kategori = isset($_GET['kategori']) ? $_GET['kategori'] : '';
+$bulan = isset($_GET['bulan']) ? $_GET['bulan'] : '';
+$tahun = isset($_GET['tahun']) ? (int)$_GET['tahun'] : date('Y');
+$search = isset($_GET['search']) ? $_GET['search'] : '';
+$totalRealisasi = 0;
+
+// Inisialisasi array kategori default
 $categories = [
+    'all' => 'Semua Kategori',
     'pendapatan' => 'Pendapatan',
     'beban' => 'Beban',
-    'laba rugi usaha' => 'Laba Rugi Usaha'
+    'laba rugi usaha' => 'Laba Rugi Usaha',
+    // Tambahkan kategori lain sesuai kebutuhan
 ];
 
-$kategori = $_GET['kategori'] ?? '';
-$bulan = $_GET['bulan'] ?? '';
-$tahun = $_GET['tahun'] ?? '';
-$search = $_GET['search'] ?? '';
+$whereClauses = ["tahun = ?"];
+$params = [$tahun];
+$paramTypes = "i";
 
-/* Resequence numbering before fetching data */
-// resequenceNumbering($conn, $kategori);
-
-$whereClauses = [];
-$params = [];
-$paramTypes = '';
-
-$allowedCategories = ['pendapatan', 'beban', 'laba rugi usaha'];
-
+// Tambahkan filter kategori jika ada dan bukan 'all'
 if ($kategori !== '' && $kategori !== 'all') {
-    $whereClauses[] = 'kategori = ?';
+    $whereClauses[] = "kategori = ?";
     $params[] = $kategori;
-    $paramTypes .= 's';
-} else if ($kategori === 'all') {
-    // When 'all' is selected, filter only allowed categories
-    $placeholders = implode(',', array_fill(0, count($allowedCategories), '?'));
-    $whereClauses[] = "kategori IN ($placeholders)";
-    foreach ($allowedCategories as $cat) {
-        $params[] = $cat;
-        $paramTypes .= 's';
-    }
-} else if ($kategori === '') {
-    // No category selected, return no data
-    $whereClauses[] = '1=0';
+    $paramTypes .= "s";
 }
 
+// Tambahkan filter bulan jika ada
 if ($bulan !== '') {
-    $whereClauses[] = 'MONTH(input_date) = ?';
-    $params[] = $bulan;
-    $paramTypes .= 'i';
+    $whereClauses[] = "bulan = ?";
+    $params[] = (int)$bulan;
+    $paramTypes .= "i";
 }
 
-if ($tahun !== '') {
-    $whereClauses[] = 'YEAR(input_date) = ?';
-    $params[] = $tahun;
-    $paramTypes .= 'i';
-}
-
+// Tambahkan filter pencarian pada kolom Uraian jika ada
 if ($search !== '') {
-    $whereClauses[] = 'Uraian LIKE ?';
-    $params[] = '%' . $search . '%';
-    $paramTypes .= 's';
+    $whereClauses[] = "Uraian LIKE ?";
+    $params[] = "%" . $search . "%";
+    $paramTypes .= "s";
 }
 
-$whereSql = '';
-if (count($whereClauses) > 0) {
-    $whereSql = 'WHERE ' . implode(' AND ', $whereClauses);
+// Ambil data laporan tahun ini
+$sql = "SELECT * FROM laporan WHERE " . implode(" AND ", $whereClauses) . " ORDER BY id ASC";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param($paramTypes, ...$params);
+$stmt->execute();
+$result = $stmt->get_result();
+
+$laporanData = [];
+while ($row = $result->fetch_assoc()) {
+    $laporanData[$row['kategori'] . '||' . $row['Uraian'] . '||' . $row['bulan']] = $row;
+}
+$stmt->close();
+
+// Hitung total REALISASI_TAHUN_INI untuk Analisis Vertical
+$totalRealisasi = 0;
+foreach ($laporanData as $data) {
+    $totalRealisasi += $data['REALISASI_TAHUN_INI'] ?? 0;
 }
 
-/* Calculate total REALISASI_TAHUN_INI across all data (unfiltered) for ANALISIS_VERTICAL */
-$stmtTotal = $conn->prepare("SELECT SUM(REALISASI_TAHUN_INI) as total_realisasi FROM laporan $whereSql");
-if ($paramTypes) {
-    $stmtTotal->bind_param($paramTypes, ...$params);
+function getTotalByKategori($conn, $kategori, $column, $bulan = null, $tahun = null) {
+    $sql = "SELECT SUM($column) as total FROM laporan WHERE kategori = ?";
+    $types = "s";
+    $params = [$kategori];
+
+    if ($bulan !== null) {
+        $sql .= " AND bulan = ?";
+        $types .= "i";
+        $params[] = $bulan;
+    }
+    if ($tahun !== null) {
+        $sql .= " AND tahun = ?";
+        $types .= "i";
+        $params[] = $tahun;
+    }
+
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param($types, ...$params);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result->fetch_assoc();
+    $stmt->close();
+    return $row['total'] ?? 0;
 }
-$stmtTotal->execute();
-$resultTotal = $stmtTotal->get_result();
-$rowTotal = $resultTotal->fetch_assoc();
-$totalRealisasi = $rowTotal['total_realisasi'] ?? 0;
-$stmtTotal->close();
+
+// Asumsikan variabel $whereClauses, $params, $nextYear sudah didefinisikan sebelumnya
+$whereClausesNextYear = $whereClauses ?? [];
+$paramsNextYear = $params ?? [];
+$nextYear = (int)$tahun + 1;
+
+// Hapus filter bulan dari klausa
+foreach (array_values($whereClausesNextYear) as $i => $clause) {
+    if (strpos($clause, 'bulan = ?') !== false) {
+        $keys = array_keys($whereClausesNextYear);
+        $index = $keys[$i];
+        unset($whereClausesNextYear[$index]);
+
+        $paramIndexToRemove = 0;
+        foreach ($whereClauses as $j => $c) {
+            if ($c === 'bulan = ?') {
+                break;
+            }
+            $paramIndexToRemove++;
+        }
+        array_splice($paramsNextYear, $paramIndexToRemove, 1);
+        break;
+    }
+}
+
+// Ubah filter tahun ke tahun berikutnya
+foreach ($whereClausesNextYear as $i => $clause) {
+    if (strpos($clause, 'tahun = ?') !== false) {
+        $paramIndex = 0;
+        foreach ($whereClausesNextYear as $j => $c) {
+            if ($c === 'tahun = ?') {
+                break;
+            }
+            $paramIndex++;
+        }
+        $paramsNextYear[$paramIndex] = $nextYear;
+        break;
+    }
+}
+
+// Hitung ulang jenis parameter untuk bind_param
+$paramTypesNextYear = '';
+foreach ($paramsNextYear as $param) {
+    $paramTypesNextYear .= is_int($param) ? 'i' : 's';
+}
+
+// Eksekusi query untuk tahun berikutnya
+$sqlNextYear = "SELECT * FROM laporan " . (count($whereClausesNextYear) ? 'WHERE ' . implode(' AND ', $whereClausesNextYear) : '') . " ORDER BY id ASC";
+$stmtNextYear = $conn->prepare($sqlNextYear);
+if ($paramTypesNextYear) {
+    error_log("paramTypesNextYear: $paramTypesNextYear");
+    error_log("paramsNextYear count: " . count($paramsNextYear));
+    $stmtNextYear->bind_param($paramTypesNextYear, ...$paramsNextYear);
+}
+$stmtNextYear->execute();
+$resultNextYear = $stmtNextYear->get_result();
+
+$laporanDataNextYear = [];
+while ($row = $resultNextYear->fetch_assoc()) {
+    $laporanDataNextYear[$row['kategori'] . '||' . $row['Uraian'] . '||' . $row['bulan']] = $row;
+}
+$stmtNextYear->close();
+
+foreach ($laporanData as $key => &$row) {
+    if (isset($laporanDataNextYear[$key])) {
+        $row['REALISASI_TAHUN_INI'] = $laporanDataNextYear[$key]['REALISASI_TAHUN_LALU'];
+    }
+}
+unset($row);
+
+$tree = buildTree(array_values($laporanData));
 
 /* Build tree with protection against infinite recursion */
 function buildTree(array $elements, $parentId = null, $visited = [], $depth = 0, $maxDepth = 100) {
@@ -101,21 +186,191 @@ function buildTree(array $elements, $parentId = null, $visited = [], $depth = 0,
     return $branch;
 }
 
-// Fetch laporan data with filters
-$sql = "SELECT * FROM laporan $whereSql ORDER BY id ASC";
-$stmt = $conn->prepare($sql);
-if ($paramTypes) {
-    $stmt->bind_param($paramTypes, ...$params);
+// Fungsi agregasi rekursif untuk menjumlahkan nilai anak ke parent
+function aggregateChildrenValues(array &$elements, $parentId = null) {
+    $sumRealisasi = 0;
+    $sumAnggaran = 0;
+    foreach ($elements as &$element) {
+        if ($element['parent_id'] == $parentId) {
+            // Rekursif agregasi anak
+            $childSums = aggregateChildrenValues($elements, $element['id']);
+            // Tambahkan nilai anak ke parent
+            $element['REALISASI_TAHUN_INI'] += $childSums['realisasi'];
+            $element['ANGGARAN_TAHUN_INI'] += $childSums['anggaran'];
+            $sumRealisasi += $element['REALISASI_TAHUN_INI'];
+            $sumAnggaran += $element['ANGGARAN_TAHUN_INI'];
+        }
+    }
+    return ['realisasi' => $sumRealisasi, 'anggaran' => $sumAnggaran];
 }
-$stmt->execute();
-$result = $stmt->get_result();
 
-$laporanData = [];
-while ($row = $result->fetch_assoc()) {
-    $laporanData[] = $row;
+if (is_numeric($tahun)) {
+    // Definisikan $whereSql sebelum digunakan
+    $whereSql = 'WHERE ' . implode(' AND ', $whereClauses);
+
+    // Fetch data for year Y (filter year)
+    $sql = "SELECT * FROM laporan $whereSql ORDER BY id ASC";
+    $stmt = $conn->prepare($sql);
+    if ($paramTypes) {
+        $stmt->bind_param($paramTypes, ...$params);
+    }
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    $laporanData = [];
+    while ($row = $result->fetch_assoc()) {
+        $laporanData[$row['kategori'] . '||' . $row['Uraian'] . '||' . $row['bulan']] = $row;
+    }
+    error_log("Data tahun $tahun count: " . count($laporanData));
+    error_log("Data tahun $tahun keys: " . implode(", ", array_keys($laporanData)));
+
+    // Restore mapping REALISASI_TAHUN_LALU from next year data to REALISASI_TAHUN_INI in current year data
+    $nextYear = (int)$tahun + 1;
+    $whereClausesNextYear = $whereClauses;
+    $paramsNextYear = $params;
+    $paramTypesNextYear = $paramTypes;
+
+    // Remove month filter for next year data to allow mapping across all months
+   // Remove month filter for next year data to allow mapping across all months
+foreach (array_values($whereClausesNextYear) as $i => $clause) {
+    if (strpos($clause, 'bulan = ?') !== false) {
+        $keys = array_keys($whereClausesNextYear);
+        $index = $keys[$i];
+        unset($whereClausesNextYear[$index]);
+
+        // Temukan index parameter bulan dan hapus dari $paramsNextYear
+        $paramIndexToRemove = 0;
+        foreach ($whereClauses as $j => $c) {
+            if ($c === 'bulan = ?') {
+                break;
+            }
+            $paramIndexToRemove++;
+        }
+        array_splice($paramsNextYear, $paramIndexToRemove, 1);
+
+        // Update paramTypesNextYear
+        $paramTypesNextYear = '';
+        foreach ($paramsNextYear as $param) {
+            $paramTypesNextYear .= is_int($param) ? 'i' : 's';
+        }
+        break;
+    }
 }
 
-$tree = buildTree($laporanData); // Build hierarchical tree structure from flat list
+// ✅ Tambahan kode untuk mengganti tahun = ? ke next year
+foreach ($whereClausesNextYear as $i => $clause) {
+    if (strpos($clause, 'tahun = ?') !== false) {
+        $paramsNextYear[$i] = $nextYear;
+        break;
+    }
+}
+
+
+    // Replace year filter with next year
+    // Find the correct index in $paramsNextYear corresponding to the year filter
+    $paramIndex = 0;
+
+
+    $whereSqlNextYear = '';
+    if (count($whereClausesNextYear) > 0) {
+        $whereSqlNextYear = 'WHERE ' . implode(' AND ', $whereClausesNextYear);
+    }
+
+    $sqlNextYear = "SELECT * FROM laporan $whereSqlNextYear ORDER BY id ASC";
+    $stmtNextYear = $conn->prepare($sqlNextYear);
+    if ($paramTypesNextYear) {
+        error_log("paramTypesNextYear: " . $paramTypesNextYear);
+        error_log("paramsNextYear count: " . count($paramsNextYear));
+        $stmtNextYear->bind_param($paramTypesNextYear, ...$paramsNextYear);
+    }
+    $stmtNextYear->execute();
+    $resultNextYear = $stmtNextYear->get_result();
+
+    $laporanDataNextYear = [];
+    while ($row = $resultNextYear->fetch_assoc()) {
+        $laporanDataNextYear[$row['kategori'] . '||' . $row['Uraian'] . '||' . $row['bulan']] = $row;
+    }
+    error_log("Data tahun " . ($tahun + 1) . " count: " . count($laporanDataNextYear));
+    error_log("Data tahun " . ($tahun + 1) . " keys: " . implode(", ", array_keys($laporanDataNextYear)));
+
+    foreach ($laporanData as $key => &$row) {
+        if (isset($laporanDataNextYear[$key])) {
+            // Only replace REALISASI_TAHUN_INI with next year's REALISASI_TAHUN_LALU
+            $row['REALISASI_TAHUN_INI'] = $laporanDataNextYear[$key]['REALISASI_TAHUN_LALU'];
+        }
+    }
+    unset($row);
+
+    // Tambahkan data laba rugi usaha secara dinamis ke laporanData jika kategori adalah 'all' atau 'laba rugi usaha'
+    if ($kategori === 'all' || $kategori === 'laba rugi usaha') {
+        $pendapatanRealisasiLalu = getTotalByKategori($conn, 'pendapatan', 'REALISASI_TAHUN_LALU', $bulan, $tahun);
+        $bebanRealisasiLalu = getTotalByKategori($conn, 'beban', 'REALISASI_TAHUN_LALU', $bulan, $tahun);
+        $pendapatanRealisasiIni = getTotalByKategori($conn, 'pendapatan', 'REALISASI_TAHUN_INI', $bulan, $tahun);
+        $bebanRealisasiIni = getTotalByKategori($conn, 'beban', 'REALISASI_TAHUN_INI', $bulan, $tahun);
+        $pendapatanAnggaranIni = getTotalByKategori($conn, 'pendapatan', 'ANGGARAN_TAHUN_INI', $bulan, $tahun);
+        $bebanAnggaranIni = getTotalByKategori($conn, 'beban', 'ANGGARAN_TAHUN_INI', $bulan, $tahun);
+        $pendapatanAnggaranPerTahun = getTotalByKategori($conn, 'pendapatan', 'ANGGARAN_PER_TAHUN', $bulan, $tahun);
+        $bebanAnggaranPerTahun = getTotalByKategori($conn, 'beban', 'ANGGARAN_PER_TAHUN', $bulan, $tahun);
+
+        $labaRugiUsahaData = [
+            'id' => 0,
+            'kategori' => 'laba rugi usaha',
+            'Uraian' => 'Laba Rugi Usaha',
+            'parent_id' => null,
+            'nomor' => '',
+            'REALISASI_TAHUN_LALU' => $pendapatanRealisasiLalu - $bebanRealisasiLalu,
+            'REALISASI_TAHUN_INI' => $pendapatanRealisasiIni - $bebanRealisasiIni,
+            'ANGGARAN_TAHUN_INI' => $pendapatanAnggaranIni - $bebanAnggaranIni,
+            'ANGGARAN_PER_TAHUN' => $pendapatanAnggaranPerTahun - $bebanAnggaranPerTahun,
+        ];
+
+        $laporanData['laba rugi usaha||Laba Rugi Usaha||'] = $labaRugiUsahaData;
+    }
+
+    $tree = buildTree(array_values($laporanData));
+} else {
+    // Fetch laporan data with filters (no year filter)
+    $sql = "SELECT * FROM laporan $whereSql ORDER BY id ASC";
+    $stmt = $conn->prepare($sql);
+    if ($paramTypes) {
+        $stmt->bind_param($paramTypes, ...$params);
+    }
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    $laporanData = [];
+    while ($row = $result->fetch_assoc()) {
+        $laporanData[] = $row;
+    }
+
+    // Tambahkan data laba rugi usaha secara dinamis ke laporanData jika kategori adalah 'all' atau 'laba rugi usaha'
+    if ($kategori === 'all' || $kategori === 'laba rugi usaha') {
+        $pendapatanRealisasiLalu = getTotalByKategori($conn, 'pendapatan', 'REALISASI_TAHUN_LALU', $bulan, $tahun);
+        $bebanRealisasiLalu = getTotalByKategori($conn, 'beban', 'REALISASI_TAHUN_LALU', $bulan, $tahun);
+        $pendapatanRealisasiIni = getTotalByKategori($conn, 'pendapatan', 'REALISASI_TAHUN_INI', $bulan, $tahun);
+        $bebanRealisasiIni = getTotalByKategori($conn, 'beban', 'REALISASI_TAHUN_INI', $bulan, $tahun);
+        $pendapatanAnggaranIni = getTotalByKategori($conn, 'pendapatan', 'ANGGARAN_TAHUN_INI', $bulan, $tahun);
+        $bebanAnggaranIni = getTotalByKategori($conn, 'beban', 'ANGGARAN_TAHUN_INI', $bulan, $tahun);
+        $pendapatanAnggaranPerTahun = getTotalByKategori($conn, 'pendapatan', 'ANGGARAN_PER_TAHUN', $bulan, $tahun);
+        $bebanAnggaranPerTahun = getTotalByKategori($conn, 'beban', 'ANGGARAN_PER_TAHUN', $bulan, $tahun);
+
+        $labaRugiUsahaData = [
+            'id' => 0,
+            'kategori' => 'laba rugi usaha',
+            'Uraian' => 'Laba Rugi Usaha',
+            'parent_id' => null,
+            'nomor' => '',
+            'REALISASI_TAHUN_LALU' => $pendapatanRealisasiLalu - $bebanRealisasiLalu,
+            'REALISASI_TAHUN_INI' => $pendapatanRealisasiIni - $bebanRealisasiIni,
+            'ANGGARAN_TAHUN_INI' => $pendapatanAnggaranIni - $bebanAnggaranIni,
+            'ANGGARAN_PER_TAHUN' => $pendapatanAnggaranPerTahun - $bebanAnggaranPerTahun,
+        ];
+
+        $laporanData[] = $labaRugiUsahaData;
+    }
+
+    $tree = buildTree($laporanData); // Build hierarchical tree structure from flat list
+}
 ?>
 
 <?php include 'header.php'; ?>
@@ -198,7 +453,7 @@ $tree = buildTree($laporanData); // Build hierarchical tree structure from flat 
                     <th>REALISASI TAHUN LALU</th>
                     <th>ANGGARAN TAHUN INI</th>
                     <th>REALISASI TAHUN INI</th>
-                    <th>ANGGARAN TAHUN 2025</th>
+                <th>ANGGARAN PER TAHUN</th>
                     <th>% Ach (1)</th>
                     <th>% Gro</th>
                     <th>% Ach (2)</th>
@@ -208,11 +463,11 @@ $tree = buildTree($laporanData); // Build hierarchical tree structure from flat 
             </thead>
             <tbody>
         <?php 
-        $totalRealisasiTahunLalu = 0;
-        $totalAnggaranTahunIni = 0;
-        $totalRealisasiTahunIni = 0;
-        $totalAnggaranTahun2025 = 0;
-        $totalAnalisisVertical = 0;
+$totalRealisasiTahunLalu = 0;
+$totalAnggaranTahunIni = 0;
+$totalRealisasiTahunIni = 0;
+$totalAnggaranPerTahun = 0;
+$totalAnalisisVertical = 0;
 
         function renderTree($tree, $level = 0, &$totals) {
             foreach ($tree as $node) {
@@ -234,7 +489,7 @@ $tree = buildTree($laporanData); // Build hierarchical tree structure from flat 
 
                 $ach1 = ($node['ANGGARAN_TAHUN_INI'] != 0) ? ($node['REALISASI_TAHUN_INI'] / $node['ANGGARAN_TAHUN_INI']) * 100 : 0;
                 $gro = ($node['REALISASI_TAHUN_LALU'] != 0) ? (($node['REALISASI_TAHUN_INI'] - $node['REALISASI_TAHUN_LALU']) / $node['REALISASI_TAHUN_LALU']) * 100 : 0;
-                $ach2 = ($node['ANGGARAN_TAHUN_2025'] != 0) ? ($node['REALISASI_TAHUN_INI'] / $node['ANGGARAN_TAHUN_2025']) * 100 : 0;
+                $ach2 = ((isset($node['ANGGARAN_PER_TAHUN']) && $node['ANGGARAN_PER_TAHUN'] != 0) ? ($node['REALISASI_TAHUN_INI'] / $node['ANGGARAN_PER_TAHUN']) * 100 : 0);
                 
 
                  // Perhitungan Ach 1, Ach 2, dan Analisis Vertical yang diminta
@@ -243,32 +498,40 @@ $tree = buildTree($laporanData); // Build hierarchical tree structure from flat 
                 $analisisVertical = ($totals['totalRealisasi'] != 0) ? ($node['REALISASI_TAHUN_INI'] / $totals['totalRealisasi']) * 100 : 0;
 
                 $totals['totalRealisasiTahunLalu'] += $node['REALISASI_TAHUN_LALU'];
-                $totals['totalAnggaranTahunIni'] += $node['ANGGARAN_TAHUN_INI'];
-                $totals['totalRealisasiTahunIni'] += $node['REALISASI_TAHUN_INI'];
-                $totals['totalAnggaranTahun2025'] += $node['ANGGARAN_TAHUN_2025'];
-                $totals['totalAnalisisVertical'] += $analisisVertical;
+        $totals['totalAnggaranTahunIni'] += $node['ANGGARAN_TAHUN_INI'];
+        $totals['totalRealisasiTahunIni'] += $node['REALISASI_TAHUN_INI'];
+        $totals['totalAnggaranPerTahun'] += (isset($node['ANGGARAN_PER_TAHUN']) ? $node['ANGGARAN_PER_TAHUN'] : 0);
+        $totals['totalAnalisisVertical'] += $analisisVertical;
         ?>
-                <tr>
-                    <td><?= htmlspecialchars($numbering) ?></td>
-                    <td><?= $indent . htmlspecialchars($node['Uraian']) ?></td>
-                    <td><?= number_format($node['REALISASI_TAHUN_LALU'], 2, ',', '.') ?></td>
-                    <td><?= number_format($node['ANGGARAN_TAHUN_INI'], 2, ',', '.') ?></td>
-                    <td><?= number_format($node['REALISASI_TAHUN_INI'], 2, ',', '.') ?></td>
-                    <td><?= number_format($node['ANGGARAN_TAHUN_2025'], 2, ',', '.') ?></td>
-                    <td><?= number_format($ach1, 2, ',', '.') ?>%</td>
-                    <td><?= number_format($gro, 2, ',', '.') ?>%</td>
-                    <td><?= number_format($ach2, 2, ',', '.') ?>%</td>
-                    <td><?= number_format($analisisVertical, 2, ',', '.') ?>%</td>
-                    <td style="display: flex; justify-content: flex-end; gap: 6px; align-items: center;">
-                        <a href="editlaporan.php?id=<?= $node['id'] ?>" class="btn btn-sm btn-outline-warning p-1 d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;" title="Edit"><i class="bi bi-pencil"></i></a>
-                        <form method="POST" action="hapuslaporan.php" style="margin: 0;" onsubmit="return confirm('Yakin ingin menghapus data ini?');">
-                            <input type="hidden" name="id" value="<?= htmlspecialchars($node['id']) ?>">
-                            <input type="hidden" name="kategori" value="<?= htmlspecialchars($node['kategori']) ?>">
-                            <button type="submit" class="btn btn-sm btn-outline-danger p-1 d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;" title="Hapus"><i class="bi bi-trash"></i></button>
-                        </form>
-                        <a href="tambahlaporan.php?kategori=<?= urlencode($node['kategori']) ?>&parent_id=<?= $node['id'] ?>" class="btn btn-sm btn-outline-success p-1 d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;" title="Tambah Sub Uraian"><i class="bi bi-plus-lg"></i></a>
-                    </td>
-                </tr>
+            <tr>
+                <td><?= htmlspecialchars($numbering) ?></td>
+                <td><?= $indent . htmlspecialchars($node['Uraian']) ?></td>
+                <td><?= number_format($node['REALISASI_TAHUN_LALU'], 2, ',', '.') ?></td>
+                <td><?= number_format($node['ANGGARAN_TAHUN_INI'], 2, ',', '.') ?></td>
+                <td><?= number_format($node['REALISASI_TAHUN_INI'], 2, ',', '.') ?></td>
+                <td>
+                    <?php 
+                    if (isset($node['ANGGARAN_PER_TAHUN'])) {
+                        echo number_format($node['ANGGARAN_PER_TAHUN'], 2, ',', '.');
+                    } else {
+                        echo 0;
+                    }
+                    ?>
+                </td>
+                <td><?= number_format($ach1, 2, ',', '.') ?>%</td>
+                <td><?= number_format($gro, 2, ',', '.') ?>%</td>
+                <td><?= number_format($ach2, 2, ',', '.') ?>%</td>
+                <td><?= number_format($analisisVertical, 2, ',', '.') ?>%</td>
+                <td style="display: flex; justify-content: flex-end; gap: 6px; align-items: center;">
+                    <a href="editlaporan.php?id=<?= $node['id'] ?>" class="btn btn-sm btn-outline-warning p-1 d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;" title="Edit"><i class="bi bi-pencil"></i></a>
+                    <form method="POST" action="hapuslaporan.php" style="margin: 0;" onsubmit="return confirm('Yakin ingin menghapus data ini?');">
+                        <input type="hidden" name="id" value="<?= htmlspecialchars($node['id']) ?>">
+                        <input type="hidden" name="kategori" value="<?= htmlspecialchars($node['kategori']) ?>">
+                        <button type="submit" class="btn btn-sm btn-outline-danger p-1 d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;" title="Hapus"><i class="bi bi-trash"></i></button>
+                    </form>
+                    <a href="tambahlaporan.php?kategori=<?= urlencode($node['kategori']) ?>&parent_id=<?= $node['id'] ?>" class="btn btn-sm btn-outline-success p-1 d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;" title="Tambah Sub Uraian"><i class="bi bi-plus-lg"></i></a>
+                </td>
+            </tr>
         <?php
                 if (!empty($node['children'])) {
                     renderTree($node['children'], $level + 1, $totals);
@@ -276,159 +539,126 @@ $tree = buildTree($laporanData); // Build hierarchical tree structure from flat 
             }
         }
 
-        if (!empty($tree)):
-            $totals = [
-                'totalRealisasiTahunLalu' => 0,
-                'totalAnggaranTahunIni' => 0,
-                'totalRealisasiTahunIni' => 0,
-                'totalAnggaranTahun2025' => 0,
-                'totalAnalisisVertical' => 0,
-                'totalRealisasi' => $totalRealisasi
-            ];
+if (!empty($tree)):
+    $totals = [
+        'totalRealisasiTahunLalu' => 0,
+        'totalAnggaranTahunIni' => 0,
+        'totalRealisasiTahunIni' => 0,
+        'totalAnggaranPerTahun' => 0,
+        'totalAnalisisVertical' => 0,
+        'totalRealisasi' => $totalRealisasi
+    ];
 
-            function getTotalByKategori($conn, $kategori, $column) {
-                $sql = "SELECT SUM($column) as total FROM laporan WHERE kategori = ?";
-                $stmt = $conn->prepare($sql);
-                $stmt->bind_param("s", $kategori);
-                $stmt->execute();
-                $result = $stmt->get_result();
-                $row = $result->fetch_assoc();
-                $stmt->close();
-                return $row['total'] ?? 0;
-            }
+    if ($kategori === 'all' || $kategori === 'laba rugi usaha') {
+        $pendapatanRealisasiLalu = getTotalByKategori($conn, 'pendapatan', 'REALISASI_TAHUN_LALU');
+        $bebanRealisasiLalu = getTotalByKategori($conn, 'beban', 'REALISASI_TAHUN_LALU');
+        $pendapatanRealisasiIni = getTotalByKategori($conn, 'pendapatan', 'REALISASI_TAHUN_INI');
+        $bebanRealisasiIni = getTotalByKategori($conn, 'beban', 'REALISASI_TAHUN_INI');
+        $pendapatanAnggaranIni = getTotalByKategori($conn, 'pendapatan', 'ANGGARAN_TAHUN_INI');
+        $bebanAnggaranIni = getTotalByKategori($conn, 'beban', 'ANGGARAN_TAHUN_INI');
+        error_log("DEBUG: getTotalByKategori pendapatan ANGGARAN_PER_TAHUN with bulan=$bulan tahun=$tahun");
+        $pendapatanAnggaranPerTahun = getTotalByKategori($conn, 'pendapatan', 'ANGGARAN_PER_TAHUN', $bulan, $tahun);
+        error_log("DEBUG: pendapatanAnggaranPerTahun = $pendapatanAnggaranPerTahun");
 
-            if ($kategori === 'all' || $kategori === 'laba rugi usaha') {
-                $pendapatanRealisasiLalu = getTotalByKategori($conn, 'pendapatan', 'REALISASI_TAHUN_LALU');
-                $bebanRealisasiLalu = getTotalByKategori($conn, 'beban', 'REALISASI_TAHUN_LALU');
-                $pendapatanRealisasiIni = getTotalByKategori($conn, 'pendapatan', 'REALISASI_TAHUN_INI');
-                $bebanRealisasiIni = getTotalByKategori($conn, 'beban', 'REALISASI_TAHUN_INI');
-                $pendapatanAnggaranIni = getTotalByKategori($conn, 'pendapatan', 'ANGGARAN_TAHUN_INI');
-                $bebanAnggaranIni = getTotalByKategori($conn, 'beban', 'ANGGARAN_TAHUN_INI');
+        error_log("DEBUG: getTotalByKategori beban ANGGARAN_PER_TAHUN with bulan=$bulan tahun=$tahun");
+        $bebanAnggaranPerTahun = getTotalByKategori($conn, 'beban', 'ANGGARAN_PER_TAHUN', $bulan, $tahun);
+        error_log("DEBUG: bebanAnggaranPerTahun = $bebanAnggaranPerTahun");
 
-                $totalsLabaRugiUsaha = [
-                    'totalRealisasiTahunLalu' => $pendapatanRealisasiLalu - $bebanRealisasiLalu,
-                    'totalRealisasiTahunIni' => $pendapatanRealisasiIni - $bebanRealisasiIni,
-                    'totalAnggaranTahunIni' => $pendapatanAnggaranIni - $bebanAnggaranIni,
-                    'totalAnggaranTahun2025' => 0,
-                    'totalAnalisisVertical' => 0,
-                ];
-            }
+        $totalsLabaRugiUsaha = [
+            'totalRealisasiTahunLalu' => $pendapatanRealisasiLalu + $bebanRealisasiLalu,
+            'totalRealisasiTahunIni' => $pendapatanRealisasiIni + $bebanRealisasiIni,
+            'totalAnggaranTahunIni' => $pendapatanAnggaranIni + $bebanAnggaranIni,
+            'totalAnggaranPerTahun' => $pendapatanAnggaranPerTahun + $bebanAnggaranPerTahun,
+            'totalAnalisisVertical' => 0,
+        ];
 
-            // Removed block for 'laba rugi sebelum pajak penghasilan' and related categories to fix warnings
-            // if ($kategori === 'all' || $kategori === 'laba rugi sebelum pajak penghasilan') {
-            //     $labaRugiUsahaRealisasiLalu = getTotalByKategori($conn, 'laba rugi usaha', 'REALISASI_TAHUN_LALU');
-            //     $pendapatanBebanLainLainRealisasiLalu = getTotalByKategori($conn, 'pendapatan beban lain lain', 'REALISASI_TAHUN_LALU');
-            //     $labaRugiUsahaRealisasiIni = getTotalByKategori($conn, 'laba rugi usaha', 'REALISASI_TAHUN_INI');
-            //     $pendapatanBebanLainLainRealisasiIni = getTotalByKategori($conn, 'pendapatan beban lain lain', 'REALISASI_TAHUN_INI');
-            //     $labaRugiUsahaAnggaranIni = getTotalByKategori($conn, 'laba rugi usaha', 'ANGGARAN_TAHUN_INI');
-            //     $pendapatanBebanLainLainAnggaranIni = getTotalByKategori($conn, 'pendapatan beban lain lain', 'ANGGARAN_TAHUN_INI');
+    }
 
-            //     $totalsLabaRugiSebelumPajak = [
-            //         'totalRealisasiTahunLalu' => $labaRugiUsahaRealisasiLalu - $pendapatanBebanLainLainRealisasiLalu,
-            //         'totalRealisasiTahunIni' => $labaRugiUsahaRealisasiIni - $pendapatanBebanLainLainRealisasiIni,
-            //         'totalAnggaranTahunIni' => $labaRugiUsahaAnggaranIni - $pendapatanBebanLainLainAnggaranIni,
-            //         'totalAnggaranTahun2025' => 0,
-            //         'totalAnalisisVertical' => 0,
-            //     ];
-            // }
-
-            $currentKategori = null;
-            foreach ($tree as $node):
-                if ($kategori === 'all' && $currentKategori !== $node['kategori']):
-                    if ($currentKategori !== null):
-        ?>
-                    <tr class="table-secondary fw-bold">
-                        <td>Jumlah <?= htmlspecialchars($categories[$currentKategori]) ?></td>
-                        <td>
-                            <?php
-                            if ($currentKategori === 'laba rugi usaha' && isset($totalsLabaRugiUsaha)) {
-                                echo number_format($totalsLabaRugiUsaha['totalRealisasiTahunLalu'], 2, ',', '.');
-                            } else if ($currentKategori === 'laba rugi sebelum pajak penghasilan' && isset($totalsLabaRugiSebelumPajak)) {
-                                echo number_format($totalsLabaRugiSebelumPajak['totalRealisasiTahunLalu'], 2, ',', '.');
-                            } else {
-                                echo number_format($totals['totalRealisasiTahunLalu'], 2, ',', '.');
-                            }
-                            ?>
-                        </td>
-                        <td><?= number_format($totals['totalAnggaranTahunIni'], 2, ',', '.') ?></td>
-                        <td>
-                            <?php
-                            if ($currentKategori === 'laba rugi usaha' && isset($totalsLabaRugiUsaha)) {
-                                echo number_format($totalsLabaRugiUsaha['totalRealisasiTahunIni'], 2, ',', '.');
-                            } else if ($currentKategori === 'laba rugi sebelum pajak penghasilan' && isset($totalsLabaRugiSebelumPajak)) {
-                                echo number_format($totalsLabaRugiSebelumPajak['totalRealisasiTahunIni'], 2, ',', '.');
-                            } else {
-                                echo number_format($totals['totalRealisasiTahunIni'], 2, ',', '.');
-                            }
-                            ?>
-                        </td>
-                        <td>
-                            <?php
-                            if ($currentKategori === 'laba rugi usaha' && isset($totalsLabaRugiUsaha)) {
-                                echo number_format($totalsLabaRugiUsaha['totalAnggaranTahunIni'], 2, ',', '.');
-                            } else if ($currentKategori === 'laba rugi sebelum pajak penghasilan' && isset($totalsLabaRugiSebelumPajak)) {
-                                echo number_format($totalsLabaRugiSebelumPajak['totalAnggaranTahunIni'], 2, ',', '.');
-                            } else {
-                                echo number_format($totals['totalAnggaranTahun2025'], 2, ',', '.');
-                            }
-                            ?>
-                        </td>
-                        <td><?= number_format($totals['totalAnggaranTahun2025'], 2, ',', '.') ?></td>
-                        <?php
-                            $ach1_jumlah = ($totals['totalAnggaranTahunIni'] != 0) ? ($totals['totalRealisasiTahunIni'] / $totals['totalAnggaranTahunIni']) * 100 : 0;
-                            $gro_jumlah = ($totals['totalRealisasiTahunLalu'] != 0) ? (($totals['totalRealisasiTahunIni'] - $totals['totalRealisasiTahunLalu']) / $totals['totalRealisasiTahunLalu']) * 100 : 0;
-                            $ach2_jumlah = ($totals['totalAnggaranTahun2025'] != 0) ? ($totals['totalRealisasiTahunIni'] / $totals['totalAnggaranTahun2025']) * 100 : 0;
-                            $analisisVertical_jumlah = ($totals['totalRealisasi'] != 0) ? ($totals['totalRealisasiTahunIni'] / $totals['totalRealisasi']) * 100 : 0;
-                        ?>
-                        <td><?= number_format($ach1_jumlah, 2, ',', '.') ?>%</td>
-                        <td><?= number_format($gro_jumlah, 2, ',', '.') ?>%</td>
-                        <td><?= number_format($ach2_jumlah, 2, ',', '.') ?>%</td>
-                        <td><?= number_format($analisisVertical_jumlah, 2, ',', '.') ?>%</td>
-                        <td></td>
-                    </tr>
-        <?php
-                    endif;
-                $totals = [
-                    'totalRealisasiTahunLalu' => 0,
-                    'totalAnggaranTahunIni' => 0,
-                    'totalRealisasiTahunIni' => 0,
-                    'totalAnggaranTahun2025' => 0,
-                    'totalAnalisisVertical' => 0,
-                    'totalRealisasi' => $totalRealisasi
-                ];
-                $currentKategori = $node['kategori'];
-        ?>
-                <tr class="table-primary fw-bold">
-                    <td colspan="10"><?= htmlspecialchars($categories[$currentKategori]) ?></td>
-                </tr>
-        <?php
-                elseif ($currentKategori === null):
-                    $currentKategori = $node['kategori'];
-        ?>
-                <tr class="table-primary fw-bold">
-                    <td colspan="10"><?= htmlspecialchars($categories[$currentKategori]) ?></td>
-                </tr>
-        <?php
-                endif;
-                renderTree([$node], 0, $totals);
-            endforeach;
-        ?>
-            <tr class="table-secondary fw-bold">
-                <td></td>
-                <td>Jumlah <?= htmlspecialchars($categories[$currentKategori]) ?></td>
-                <td><?= number_format($totals['totalRealisasiTahunLalu'], 2, ',', '.') ?></td>
-                <td><?= number_format($totals['totalAnggaranTahunIni'], 2, ',', '.') ?></td>
-                <td><?= number_format($totals['totalRealisasiTahunIni'], 2, ',', '.') ?></td>
-                <td><?= number_format($totals['totalAnggaranTahun2025'], 2, ',', '.') ?></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td><?= number_format($totals['totalAnalisisVertical'], 2, ',', '.') ?>%</td>
-                <td></td>
-            </tr>
-        <?php else: ?>
-            <tr><td colspan="10" class="text-center">Tidak ada data.</td></tr>
-        <?php endif; ?>
+    $currentKategori = null;
+    foreach ($tree as $node):
+        if ($kategori === 'all' && $currentKategori !== $node['kategori']):
+            if ($currentKategori !== null):
+?>
+        <tr class="table-secondary fw-bold">
+            <td>Jumlah <?= htmlspecialchars($categories[$currentKategori]) ?></td>
+            <td>
+                <?php
+                if ($currentKategori === 'laba rugi usaha' && isset($totalsLabaRugiUsaha)) {
+                    echo number_format($totalsLabaRugiUsaha['totalRealisasiTahunLalu'], 2, ',', '.');
+                } else {
+                    echo number_format($totals['totalRealisasiTahunLalu'], 2, ',', '.');
+                }
+                ?>
+            </td>
+            <td><?= number_format($totals['totalAnggaranTahunIni'], 2, ',', '.') ?></td>
+            <td>
+                <?php
+                if ($currentKategori === 'laba rugi usaha' && isset($totalsLabaRugiUsaha)) {
+                    echo number_format($totalsLabaRugiUsaha['totalRealisasiTahunIni'], 2, ',', '.');
+                } else {
+                    echo number_format($totals['totalRealisasiTahunIni'], 2, ',', '.');
+                }
+                ?>
+            </td>
+            <td>
+                <?php
+                if ($currentKategori === 'laba rugi usaha' && isset($totalsLabaRugiUsaha)) {
+                    echo number_format($totalsLabaRugiUsaha['totalAnggaranTahunIni'], 2, ',', '.');
+                } else {
+                    echo number_format(isset($totals['totalAnggaranPerTahun']) ? $totals['totalAnggaranPerTahun'] : 0, 2, ',', '.');
+                }
+                ?>
+            </td>
+            <td><?= number_format(isset($totals['totalAnggaranPerTahun']) ? $totals['totalAnggaranPerTahun'] : 0, 2, ',', '.') ?></td>
+            <td><?= number_format(($totals['totalAnggaranTahunIni'] != 0) ? ($totals['totalRealisasiTahunIni'] / $totals['totalAnggaranTahunIni']) * 100 : 0, 2, ',', '.') ?>%</td>
+            <td><?= number_format(($totals['totalRealisasiTahunLalu'] != 0) ? (($totals['totalRealisasiTahunIni'] - $totals['totalRealisasiTahunLalu']) / $totals['totalRealisasiTahunLalu']) * 100 : 0, 2, ',', '.') ?>%</td>
+            <td><?= number_format((isset($totals['totalAnggaranPerTahun']) && $totals['totalAnggaranPerTahun'] != 0) ? ($totals['totalRealisasiTahunIni'] / $totals['totalAnggaranPerTahun']) * 100 : 0, 2, ',', '.') ?>%</td>
+            <td><?= number_format(($totals['totalRealisasi'] != 0) ? ($totals['totalRealisasiTahunIni'] / $totals['totalRealisasi']) * 100 : 0, 2, ',', '.') ?>%</td>
+            <td></td>
+        </tr>
+<?php
+            endif;
+    $totals = [
+        'totalRealisasiTahunLalu' => 0,
+        'totalAnggaranTahunIni' => 0,
+        'totalRealisasiTahunIni' => 0,
+        'totalAnggaranPerTahun' => 0,
+        'totalAnalisisVertical' => 0,
+        'totalRealisasi' => $totalRealisasi
+    ];
+        $currentKategori = $node['kategori'];
+?>
+        <tr class="table-primary fw-bold">
+            <td colspan="10"><?= htmlspecialchars($categories[$currentKategori]) ?></td>
+        </tr>
+<?php
+        elseif ($currentKategori === null):
+            $currentKategori = $node['kategori'];
+?>
+        <tr class="table-primary fw-bold">
+            <td colspan="10"><?= htmlspecialchars($categories[$currentKategori]) ?></td>
+        </tr>
+<?php
+        endif;
+        renderTree([$node], 0, $totals);
+    endforeach;
+?>
+    <tr class="table-secondary fw-bold">
+        <td></td>
+        <td>Jumlah <?= htmlspecialchars($categories[$currentKategori]) ?></td>
+        <td><?= number_format($totals['totalRealisasiTahunLalu'], 2, ',', '.') ?></td>
+        <td><?= number_format($totals['totalAnggaranTahunIni'], 2, ',', '.') ?></td>
+        <td><?= number_format($totals['totalRealisasiTahunIni'], 2, ',', '.') ?></td>
+            <td><?= number_format(isset($totals['totalAnggaranPerTahun']) ? $totals['totalAnggaranPerTahun'] : 0, 2, ',', '.') ?></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td><?= number_format($totals['totalAnalisisVertical'], 2, ',', '.') ?>%</td>
+            <td></td>
+        </tr>
+<?php else: ?>
+    <tr><td colspan="10" class="text-center">Tidak ada data.</td></tr>
+<?php endif; ?>
         </tbody>
 </table>
     </div>

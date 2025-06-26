@@ -24,7 +24,7 @@ if ($parent_id === '' || $parent_id === '0') {
 
 $errors = [];
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $kategori = $_POST['kategori'] ?? 'pendapatan';
     $uraian = $_POST['uraian'] ?? '';
     $parent_id = $_POST['parent_id'] ?? null;
@@ -37,7 +37,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $realisasi_tahun_lalu = $_POST['realisasi_tahun_lalu'] ?? 0;
     $anggaran_tahun_ini = $_POST['anggaran_tahun_ini'] ?? 0;
     $realisasi_tahun_ini = $_POST['realisasi_tahun_ini'] ?? 0;
-    $anggaran_tahun_2025 = $_POST['anggaran_tahun_2025'] ?? 0;
+    $anggaran_per_tahun = $_POST['anggaran_per_tahun'] ?? 0;
+    $bulan = $_POST['bulan'] ?? null;
+    $tahun = $_POST['tahun'] ?? null;
     $analisis_vertical = 0;
 
     if (empty($uraian)) {
@@ -71,8 +73,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $nomor = getNextChildNumbering($conn, $parent_id);
             }
 
-            $stmt = $conn->prepare("INSERT INTO laporan (kategori, Uraian, parent_id, nomor, REALISASI_TAHUN_LALU, ANGGARAN_TAHUN_INI, REALISASI_TAHUN_INI, ANGGARAN_TAHUN_2025, ANALISIS_VERTICAL) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->bind_param("sssiddddd", $kategori, $uraian, $parent_id, $nomor, $realisasi_tahun_lalu, $anggaran_tahun_ini, $realisasi_tahun_ini, $anggaran_tahun_2025, $analisis_vertical);
+            $stmt = $conn->prepare("INSERT INTO laporan (kategori, Uraian, parent_id, nomor, REALISASI_TAHUN_LALU, ANGGARAN_TAHUN_INI, REALISASI_TAHUN_INI, ANALISIS_VERTICAL, tahun, bulan, ANGGARAN_PER_TAHUN) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("sssidddddii", $kategori, $uraian, $parent_id, $nomor, $realisasi_tahun_lalu, $anggaran_tahun_ini, $realisasi_tahun_ini, $analisis_vertical, $tahun, $bulan, $anggaran_per_tahun);
 
             if ($stmt->execute()) {
                 error_log("Insert success untuk uraian: $uraian | Nomor: $nomor");
@@ -147,8 +149,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <input type="number" step="0.01" class="form-control" id="realisasi_tahun_ini" name="realisasi_tahun_ini" value="0" onfocus="if(this.value=='0') this.value='';">
             </div>
             <div class="mb-3">
-                <label for="anggaran_tahun_2025" class="form-label">ANGGARAN PER-TAHUN</label>
-                <input type="number" step="0.01" class="form-control" id="anggaran_tahun_2025" name="anggaran_tahun_2025" value="0" onfocus="if(this.value=='0') this.value='';">
+                <label for="anggaran_per_tahun" class="form-label">ANGGARAN PER TAHUN</label>
+                <input type="number" step="0.01" class="form-control" id="anggaran_per_tahun" name="anggaran_per_tahun" value="0" onfocus="if(this.value=='0') this.value='';">
+            </div>
+            <div class="mb-3">
+                <label for="bulan" class="form-label">Bulan</label>
+                <select class="form-select" id="bulan" name="bulan" required>
+                    <option value="">Pilih Bulan</option>
+                    <?php
+                    for ($m = 1; $m <= 12; $m++) {
+                        $monthName = date('F', mktime(0, 0, 0, $m, 1));
+                        echo '<option value="' . $m . '">' . $monthName . '</option>';
+                    }
+                    ?>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label for="tahun" class="form-label">Tahun</label>
+                <select class="form-select" id="tahun" name="tahun" required>
+                    <option value="">Pilih Tahun</option>
+                    <?php
+                    $currentYear = date('Y');
+                    for ($y = $currentYear - 5; $y <= $currentYear + 5; $y++) {
+                        echo '<option value="' . $y . '">' . $y . '</option>';
+                    }
+                    ?>
+                </select>
             </div>
             <button type="submit" class="btn btn-success" id="submitBtn">Simpan</button>
             <a href="laporan.php?kategori=<?= urlencode($kategori) ?>" class="btn btn-secondary">Batal</a>
