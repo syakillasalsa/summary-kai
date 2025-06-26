@@ -1,5 +1,27 @@
+<?php session_start(); 
+include 'koneksi.php'; // pastikan file koneksi dipanggil
+
+// Default foto profil
+$foto_profil = "assets/img/person.png";
+
+// Ambil gambar user dari database jika login
+if (isset($_SESSION['username'])) {
+    $username = $_SESSION['username'];
+    $stmt = $conn->prepare("SELECT profile_picture FROM users WHERE username = ?");
+    $stmt->bind_param("s", $username);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    if ($row = $result->fetch_assoc()) {
+        if (!empty($row['profile_picture']) && file_exists($row['profile_picture'])) {
+            $foto_profil = $row['profile_picture'];
+        }
+    }
+    $stmt->close();
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
+
 
 <head>
   <meta charset="utf-8" />
@@ -48,31 +70,39 @@
     <nav class="header-nav ms-auto">
       <ul class="d-flex align-items-center">
         <li class="nav-item dropdown pe-3">
-          <a class="nav-link nav-profile d-flex align-items-center pe-0" href="#" data-bs-toggle="dropdown">
-            <img src="assets/img/person.png" alt="Profile" class="rounded-circle" />
-            <span class="d-none d-md-block dropdown-toggle ps-2">Admin</span>
-          </a><!-- End Profile Image Icon -->
+  <a class="nav-link nav-profile d-flex align-items-center pe-0 dropdown-toggle"
+     href="#" id="profileDropdown" role="button"
+     data-bs-toggle="dropdown" aria-expanded="false">
+    <img src="<?= htmlspecialchars($foto_profil) ?>" alt="Profile"
+         class="rounded-circle" style="width: 35px; height: 35px; object-fit: cover;">
+    <span class="d-none d-md-block ps-2"><?= htmlspecialchars($_SESSION['username'] ?? 'User') ?></span>
+  </a>
 
-          <ul class="dropdown-menu dropdown-menu-end dropdown-menu-arrow profile">
-            <li class="dropdown-header">
-              <h6>Admin</h6>
-              <span>Admin Keuangan</span>
-            </li>
-            <li><hr class="dropdown-divider" /></li>
-            <li>
-              <a class="dropdown-item d-flex align-items-center" href="gantipassword.php">
-                <i class="bi bi-person"></i>
-                <span>Ganti Password</span>
-              </a>
-            </li>
-            <li>
-              <a class="dropdown-item d-flex align-items-center" href="logout.php">
-                <i class="bi bi-box-arrow-right"></i>
-                <span>Keluar</span>
-              </a>
-            </li>
-          </ul><!-- End Profile Dropdown Items -->
-        </li><!-- End Profile Nav -->
+  <ul class="dropdown-menu dropdown-menu-end dropdown-menu-arrow"
+      aria-labelledby="profileDropdown">
+    <li class="dropdown-header d-flex align-items-center">
+      <img src="<?= htmlspecialchars($foto_profil) ?>" alt="Profile"
+           class="rounded-circle me-2" style="width: 40px; height: 40px; object-fit: cover;">
+      <div>
+        <h6 class="mb-0"><?= htmlspecialchars($_SESSION['username'] ?? 'User') ?></h6>
+        <span class="text-muted"><?= htmlspecialchars($_SESSION['username'] ?? 'User') ?></span>
+      </div>
+    </li>
+    <li><hr class="dropdown-divider"></li>
+    <li>
+      <a class="dropdown-item d-flex align-items-center" href="gantipassword.php">
+        <i class="bi bi-person"></i>
+        <span>Edit Profile & Ganti Password</span>
+      </a>
+    </li>
+    <li>
+      <a class="dropdown-item d-flex align-items-center" href="logout.php">
+        <i class="bi bi-box-arrow-right"></i>
+        <span>Keluar</span>
+      </a>
+    </li>
+  </ul>
+</li><!-- End Profile Nav -->
       </ul>
     </nav><!-- End Icons Navigation -->
 

@@ -207,7 +207,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <td class="text-end"><?= number_format($total_actual, 2) ?></td>
                 <td class="text-end"><?= number_format($total_consumed_budget, 2) ?></td>
                 <td class="text-end"><?= number_format($total_available_budget, 2) ?></td>
-                <td colspan="6"></td>
+                <td colspan="5"></td>
             </tr>
         </tfoot>
 </table>
