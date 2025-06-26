@@ -121,15 +121,85 @@ function getKategoriUnik($conn) {
 // New code to display laporan preview on dashboard
 ?>
 
-
-
-
 <?php
 
 list($labelsPendapatan, $valuesPendapatan) = getDataKategori($conn, 'pendapatan', $tahun, $bulan);
 list($labelsBeban, $valuesBeban) = getDataKategori($conn, 'beban', $tahun, $bulan);
 
-// Ambil data laporan lengkap untuk pendapatan dan beban
+// Query data untuk Pendapatan & Jumlah Penumpang
+$sqlPendapatanPenumpang = "SELECT 
+    SUM(COALESCE(REALISASI_TAHUN_INI,0)) AS realisasi_pendapatan,
+    SUM(COALESCE(ANGGARAN_TAHUN_INI,0)) AS anggaran_pendapatan,
+    SUM(COALESCE(volume,0)) AS jumlah_penumpang,
+    SUM(COALESCE(volume_anggaran,0)) AS jumlah_penumpang_anggaran
+    FROM laporan
+    WHERE kategori = 'pendapatan' AND (Uraian LIKE '%Penumpang%' OR Uraian LIKE '%Penumpang KA%') AND YEAR(input_date) = ? AND (MONTH(input_date) = ? OR ? = 'all')";
+$stmtPendapatanPenumpang = $conn->prepare($sqlPendapatanPenumpang);
+if (!$stmtPendapatanPenumpang) {
+    error_log("Prepare failed: (" . $conn->errno . ") " . $conn->error);
+} else {
+    $stmtPendapatanPenumpang->bind_param("iis", $tahun, $bulan, $bulan);
+    $stmtPendapatanPenumpang->execute();
+    $resultPendapatanPenumpang = $stmtPendapatanPenumpang->get_result();
+    $dataPendapatanPenumpang = $resultPendapatanPenumpang->fetch_assoc();
+    $stmtPendapatanPenumpang->close();
+}
+
+// Query data untuk Pendapatan & Volume Barang
+$sqlPendapatanVolume = "SELECT 
+    SUM(COALESCE(REALISASI_TAHUN_INI,0)) AS realisasi_pendapatan,
+    SUM(COALESCE(ANGGARAN_TAHUN_INI,0)) AS anggaran_pendapatan,
+    SUM(COALESCE(volume,0)) AS volume_barang,
+    SUM(COALESCE(volume_anggaran,0)) AS volume_barang_anggaran
+    FROM laporan
+    WHERE kategori = 'pendapatan' AND (Uraian LIKE '%Barang%' OR Uraian LIKE '%Volume%') AND YEAR(input_date) = ? AND (MONTH(input_date) = ? OR ? = 'all')";
+$stmtPendapatanVolume = $conn->prepare($sqlPendapatanVolume);
+if (!$stmtPendapatanVolume) {
+    error_log("Prepare failed: (" . $conn->errno . ") " . $conn->error);
+} else {
+    $stmtPendapatanVolume->bind_param("iis", $tahun, $bulan, $bulan);
+    $stmtPendapatanVolume->execute();
+    $resultPendapatanVolume = $stmtPendapatanVolume->get_result();
+    $dataPendapatanVolume = $resultPendapatanVolume->fetch_assoc();
+    $stmtPendapatanVolume->close();
+}
+
+// Query data untuk Pendapatan Asset
+$sqlPendapatanAsset = "SELECT 
+    SUM(COALESCE(REALISASI_TAHUN_INI,0)) AS realisasi_kinerja,
+    SUM(COALESCE(ANGGARAN_TAHUN_INI,0)) AS anggaran_kinerja,
+    SUM(COALESCE(REALISASI_TAHUN_INI,0)) AS realisasi_pendapatan,
+    SUM(COALESCE(ANGGARAN_TAHUN_INI,0)) AS anggaran_pendapatan
+    FROM laporan
+    WHERE kategori = 'pendapatan' AND (Uraian LIKE '%Kinerja Kontrak%' OR Uraian LIKE '%Pendapatan%') AND YEAR(input_date) = ? AND (MONTH(input_date) = ? OR ? = 'all')";
+$stmtPendapatanAsset = $conn->prepare($sqlPendapatanAsset);
+if (!$stmtPendapatanAsset) {
+    error_log("Prepare failed: (" . $conn->errno . ") " . $conn->error);
+} else {
+    $stmtPendapatanAsset->bind_param("iis", $tahun, $bulan, $bulan);
+    $stmtPendapatanAsset->execute();
+    $resultPendapatanAsset = $stmtPendapatanAsset->get_result();
+    $dataPendapatanAsset = $resultPendapatanAsset->fetch_assoc();
+    $stmtPendapatanAsset->close();
+}
+
+// Query data untuk Beban Asset (baru)
+$sqlBebanAsset = "SELECT 
+    SUM(COALESCE(REALISASI_TAHUN_INI,0)) AS realisasi_beban,
+    SUM(COALESCE(ANGGARAN_TAHUN_INI,0)) AS anggaran_beban
+    FROM laporan
+    WHERE kategori = 'beban' AND (Uraian LIKE '%Kinerja Kontrak%' OR Uraian LIKE '%Pendapatan%') AND YEAR(input_date) = ? AND (MONTH(input_date) = ? OR ? = 'all')";
+$stmtBebanAsset = $conn->prepare($sqlBebanAsset);
+if (!$stmtBebanAsset) {
+    error_log("Prepare failed: (" . $conn->errno . ") " . $conn->error);
+} else {
+    $stmtBebanAsset->bind_param("iis", $tahun, $bulan, $bulan);
+    $stmtBebanAsset->execute();
+    $resultBebanAsset = $stmtBebanAsset->get_result();
+    $dataBebanAsset = $resultBebanAsset->fetch_assoc();
+    $stmtBebanAsset->close();
+}
+
 $whereClauses = ["tahun = ?"];
 $params = [$tahun];
 $paramTypes = "i";
@@ -344,6 +414,12 @@ $namaBulan = [
             <label for="bulan" class="form-label">Bulan:</label>
             <select name="bulan" id="bulan" class="form-select" required>
                 <option value="all" <?= ($bulan == 'all') ? 'selected' : '' ?>>All</option>
+                <?php
+                for ($m = 1; $m <= 12; $m++) {
+                    $selected = ($bulan == $m) ? 'selected' : '';
+                    echo "<option value=\"$m\" $selected>" . $namaBulan[$m] . "</option>";
+                }
+                ?>
             </select>
         </div>
         <div class="col-md-3">
@@ -377,6 +453,61 @@ $namaBulan = [
             <h5 class="card-title">Beban</h5>
             <div id="bebanBadges" style="margin-bottom: 10px; display: flex; gap: 10px; justify-content: center; align-items: center;"></div>
             <canvas id="chartBeban" width="450" height="300"></canvas>
+        </div>
+    </div>
+
+    <!-- Tambahan chart baru di bawah chart Pendapatan dan Beban -->
+    <div class="dashboard-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 20px; margin-top: 40px;">
+        <div class="card" style="padding: 20px;">
+            <h5 class="card-title" style="text-align: center;">Pendapatan & Jumlah Penumpang</h5>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                <div>
+                    <div>Total Pendapatan</div>
+                    <div style="font-weight: bold; font-size: 1.2rem;">Rp2,457.43M</div>
+                    <div style="color: green;">▲ 3.51% yoy</div>
+                </div>
+                <div>
+                    <div>Total Penumpang</div>
+                    <div style="font-weight: bold; font-size: 1.2rem;">9,010,138</div>
+                    <div style="color: red;">▼ 5.43% yoy</div>
+                </div>
+            </div>
+            <canvas id="chartPendapatanPenumpang" width="400" height="250"></canvas>
+            <div style="font-size: 0.8rem; color: #666; margin-top: 5px;">Sumber : Rail Ticket System</div>
+        </div>
+        <div class="card" style="padding: 20px;">
+            <h5 class="card-title" style="text-align: center;">Pendapatan & Volume Barang</h5>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                <div>
+                    <div>Total Pendapatan</div>
+                    <div style="font-weight: bold; font-size: 1.2rem;">Rp155.52M</div>
+                    <div style="color: red;">▼ 51.53% yoy</div>
+                </div>
+                <div>
+                    <div>Total Volume</div>
+                    <div style="font-weight: bold; font-size: 1.2rem;">2,522,249 Ton</div>
+                    <div style="color: red;">▼ 19.03% yoy</div>
+                </div>
+            </div>
+            <canvas id="chartPendapatanVolume" width="400" height="250"></canvas>
+            <div style="font-size: 0.8rem; color: #666; margin-top: 5px;">Sumber : Rail Cargo System</div>
+        </div>
+        <div class="card" style="padding: 20px;">
+            <h5 class="card-title" style="text-align: center;">Pendapatan Asset</h5>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                <div>
+                    <div>Kinerja Kontrak</div>
+                    <div style="font-weight: bold; font-size: 1.2rem;">Rp257.80M</div>
+                    <div style="color: red;">▼ 59.00% yoy</div>
+                </div>
+                <div>
+                    <div>Total Pendapatan</div>
+                    <div style="font-weight: bold; font-size: 1.2rem;">Rp263.73M</div>
+                    <div style="color: red;">▼ 40.59% yoy</div>
+                </div>
+            </div>
+            <canvas id="chartPendapatanAsset" width="400" height="250"></canvas>
+            <div style="font-size: 0.8rem; color: #666; margin-top: 5px;">Sumber : Portal Asset</div>
         </div>
     </div>
 
@@ -568,7 +699,157 @@ $resultDetailInvestasi = $conn->query($sqlDetailInvestasi);
             </tbody>
         </table>
     </div>
-</div>
+<?php
+// Add PHP code for Biaya Keselamatan (Serapan RKA) chart data
+
+// Query total realisasi and anggaran for Biaya Keselamatan
+$sqlBiayaKeselamatanTotal = "SELECT 
+    SUM(COALESCE(REALISASI_TAHUN_INI,0)) AS total_realisasi, 
+    SUM(COALESCE(ANGGARAN_TAHUN_INI,0)) AS total_anggaran
+    FROM laporan
+    WHERE kategori = 'biaya keselamatan' AND YEAR(input_date) = ? AND (MONTH(input_date) = ? OR ? = 'all')";
+$stmtBiayaKeselamatanTotal = $conn->prepare($sqlBiayaKeselamatanTotal);
+$stmtBiayaKeselamatanTotal->bind_param("iis", $tahun, $bulan, $bulan);
+$stmtBiayaKeselamatanTotal->execute();
+$resultBiayaKeselamatanTotal = $stmtBiayaKeselamatanTotal->get_result();
+$dataBiayaKeselamatanTotal = $resultBiayaKeselamatanTotal->fetch_assoc();
+$stmtBiayaKeselamatanTotal->close();
+
+// Query consumption per unit for Biaya Keselamatan
+$sqlBiayaKeselamatanUnits = "SELECT Uraian AS uraian, 
+    SUM(COALESCE(REALISASI_TAHUN_INI,0)) AS realisasi, 
+    SUM(COALESCE(ANGGARAN_TAHUN_INI,0)) AS anggaran
+    FROM laporan
+    WHERE kategori = 'biaya keselamatan' AND YEAR(input_date) = ? AND (MONTH(input_date) = ? OR ? = 'all')
+    GROUP BY Uraian ORDER BY Uraian";
+$stmtBiayaKeselamatanUnits = $conn->prepare($sqlBiayaKeselamatanUnits);
+$stmtBiayaKeselamatanUnits->bind_param("iis", $tahun, $bulan, $bulan);
+$stmtBiayaKeselamatanUnits->execute();
+$resultBiayaKeselamatanUnits = $stmtBiayaKeselamatanUnits->get_result();
+
+$labelsBiayaKeselamatan = [];
+$realisasiBiayaKeselamatan = [];
+$anggaranBiayaKeselamatan = [];
+
+while ($row = $resultBiayaKeselamatanUnits->fetch_assoc()) {
+    $labelsBiayaKeselamatan[] = $row['uraian'];
+    $realisasiBiayaKeselamatan[] = (float)$row['realisasi'];
+    $anggaranBiayaKeselamatan[] = (float)$row['anggaran'];
+}
+$stmtBiayaKeselamatanUnits->close();
+
+// Calculate percentage for display
+$percentageBiayaKeselamatan = 0;
+if ($dataBiayaKeselamatanTotal['total_anggaran'] > 0) {
+    $percentageBiayaKeselamatan = ($dataBiayaKeselamatanTotal['total_realisasi'] / $dataBiayaKeselamatanTotal['total_anggaran']) * 100;
+}
+?>
+
+    <div class="dashboard-grid" style="display: grid; grid-template-columns: 1fr 3fr; gap: 12px 20px; margin-top: 40px;">
+        <div class="card" style="padding: 20px; text-align: center;">
+            <h5 class="card-title">Biaya Keselamatan</h5>
+            <div style="font-size: 2.5rem; font-weight: bold; margin-bottom: 5px;"><?= number_format($percentageBiayaKeselamatan, 2) ?>%</div>
+            <div style="font-size: 1rem; color: #666; margin-bottom: 10px;">
+                Rp<?= number_format($dataBiayaKeselamatanTotal['total_realisasi'], 2, ',', '.') ?> / Rp<?= number_format($dataBiayaKeselamatanTotal['total_anggaran'], 2, ',', '.') ?>
+            </div>
+        </div>
+        <div class="card" style="padding: 20px;">
+            <canvas id="chartBiayaKeselamatan" width="600" height="250"></canvas>
+        </div>
+    </div>
+
+<script>
+const ctxBiayaKeselamatan = document.getElementById('chartBiayaKeselamatan').getContext('2d');
+const chartBiayaKeselamatan = new Chart(ctxBiayaKeselamatan, {
+    type: 'bar',
+    data: {
+        labels: <?= json_encode($labelsBiayaKeselamatan) ?>,
+        datasets: [
+            {
+                label: 'Realisasi',
+                data: <?= json_encode($realisasiBiayaKeselamatan) ?>,
+                backgroundColor: 'rgba(75, 192, 192, 0.7)',
+                borderRadius: 4,
+                barPercentage: 0.5,
+            },
+            {
+                label: 'Anggaran',
+                data: <?= json_encode($anggaranBiayaKeselamatan) ?>,
+                backgroundColor: 'rgba(255, 99, 132, 0.7)',
+                borderRadius: 4,
+                barPercentage: 0.5,
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: {
+                position: 'top',
+                labels: {
+                    font: {
+                        size: 12
+                    }
+                }
+            },
+            datalabels: {
+                anchor: 'end',
+                align: 'end',
+                color: '#444',
+                font: {
+                    weight: 'bold',
+                    size: 12
+                },
+                formatter: function(value) {
+                    let num = typeof value === 'string' ? parseFloat(value) : value;
+                    if (num >= 1e12) {
+                        return 'Rp' + (num / 1e12).toFixed(2) + 'T';
+                    } else if (num >= 1e9) {
+                        return 'Rp' + (num / 1e9).toFixed(2) + 'M';
+                    } else if (num >= 1e6) {
+                        return 'Rp' + (num / 1e6).toFixed(2) + 'Jt';
+                    } else if (num >= 1e3) {
+                        return 'Rp' + (num / 1e3).toFixed(2) + 'Rb';
+                    } else {
+                        return 'Rp' + num.toFixed(2);
+                    }
+                }
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                display: true,
+                ticks: {
+                    callback: function(value) {
+                        let num = typeof value === 'string' ? parseFloat(value) : value;
+                        if (num >= 1e12) {
+                            return 'Rp' + (num / 1e12).toFixed(2) + 'T';
+                        } else if (num >= 1e9) {
+                            return 'Rp' + (num / 1e9).toFixed(2) + 'M';
+                        } else if (num >= 1e6) {
+                            return 'Rp' + (num / 1e6).toFixed(2) + 'Jt';
+                        } else if (num >= 1e3) {
+                            return 'Rp' + (num / 1e3).toFixed(2) + 'Rb';
+                        } else {
+                            return 'Rp' + num.toFixed(2);
+                        }
+                    }
+                }
+            },
+            x: {
+                ticks: {
+                    font: {
+                        size: 10
+                    }
+                }
+            }
+        }
+    },
+    plugins: [ChartDataLabels]
+});
+</script>
+
 </main>
 
 <?php include 'footer.php'; ?>
@@ -576,6 +857,7 @@ $resultDetailInvestasi = $conn->query($sqlDetailInvestasi);
 
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 <script src="assets/js/main.js"></script>
 <script src="assets/js/sidebar-accordion.js"></script>
 <script>
@@ -624,10 +906,37 @@ function createBarChart(ctx, labels, dataRealisasi, dataAnggaran, labelRealisasi
                     padding: {
                         bottom: 10
                     }
+                },
+                datalabels: {
+                    anchor: 'end',
+                    align: 'end',
+                    color: '#444',
+                    font: {
+                        weight: 'bold',
+                        size: 12
+                    },
+                    formatter: function(value) {
+                        console.log('Datalabel formatter value:', value);
+                        let num = typeof value === 'string' ? parseFloat(value) : value;
+                        if (num >= 1e12) {
+                            return 'Rp' + (num / 1e12).toFixed(2) + 'T';
+                        } else if (num >= 1e9) {
+                            return 'Rp' + (num / 1e9).toFixed(2) + 'M';
+                        } else if (num >= 1e6) {
+                            return 'Rp' + (num / 1e6).toFixed(2) + 'Jt';
+                        } else if (num >= 1e3) {
+                            return 'Rp' + (num / 1e3).toFixed(2) + 'Rb';
+                        } else {
+                            return 'Rp' + num.toFixed(2);
+                        }
+                    }
                 }
             },
             scales: {
-                y: { beginAtZero: true },
+                y: { 
+                    beginAtZero: true,
+                    display: true
+                },
                 x: {
                     ticks: {
                         font: {
@@ -645,7 +954,8 @@ function createBarChart(ctx, labels, dataRealisasi, dataAnggaran, labelRealisasi
                     }
                 }
             }
-        }
+        },
+        plugins: [ChartDataLabels]
     });
     if (chartId) {
         chartInstances[chartId] = newChart;
@@ -861,6 +1171,7 @@ labaRugiBadges.appendChild(ach1Badge);
 labaRugiBadges.appendChild(ach2Badge);
 
 // Calculate totals for pendapatan and beban
+
 const totalPendapatanRealisasi = <?= json_encode(array_sum($valuesPendapatan)) ?>;
 const totalPendapatanAnggaran = <?= json_encode(0) ?>; // Adjust if anggaran data available
 const totalBebanRealisasi = <?= json_encode(array_sum($valuesBeban)) ?>;
@@ -905,6 +1216,10 @@ const chartPendapatan = createBarChart(
     'chartPendapatan'
 );
 
+chartPendapatan.options.plugins.subtitle.display = true;
+chartPendapatan.options.plugins.subtitle.text = `Total Realisasi: ${totalPendapatanRealisasi.toLocaleString()} | Total Anggaran: ${totalPendapatanAnggaran.toLocaleString()}`;
+chartPendapatan.update();
+
 const chartBeban = createBarChart(
     document.getElementById('chartBeban').getContext('2d'),
     <?= json_encode($labelsBeban) ?>,
@@ -918,5 +1233,306 @@ const chartBeban = createBarChart(
     'chartBeban'
 );
 
-</script>
+chartBeban.options.plugins.subtitle.display = true;
+chartBeban.options.plugins.subtitle.text = `Total Realisasi: ${totalBebanRealisasi.toLocaleString()} | Total Anggaran: ${totalBebanAnggaran.toLocaleString()}`;
+chartBeban.update();
 
+chartPendapatan.options.scales.y.display = false;
+chartPendapatan.options.scales.y.grid.drawTicks = false;
+chartPendapatan.options.scales.y.grid.drawBorder = false;
+chartPendapatan.options.scales.y.grid.drawOnChartArea = false;
+chartPendapatan.options.scales.y.ticks.display = false;
+chartPendapatan.update();
+
+chartBeban.options.scales.y.display = false;
+chartBeban.options.scales.y.grid.drawTicks = false;
+chartBeban.options.scales.y.grid.drawBorder = false;
+chartBeban.options.scales.y.grid.drawOnChartArea = false;
+chartBeban.options.scales.y.ticks.display = false;
+chartBeban.update();
+
+// Chart baru: Pendapatan & Jumlah Penumpang
+const ctxPendapatanPenumpang = document.getElementById('chartPendapatanPenumpang').getContext('2d');
+const chartPendapatanPenumpang = new Chart(ctxPendapatanPenumpang, {
+    type: 'bar',
+    data: {
+        labels: ['Pendapatan', 'Penumpang'],
+        datasets: [
+            {
+                label: 'Previous',
+                data: [<?= $dataPendapatanPenumpang['realisasi_pendapatan'] ?? 0 ?>, <?= $dataPendapatanPenumpang['jumlah_penumpang'] ?? 0 ?>],
+                backgroundColor: 'rgba(255, 99, 132, 0.7)',
+                borderRadius: 4,
+                barPercentage: 0.5,
+            },
+            {
+                label: 'Program',
+                data: [<?= $dataPendapatanPenumpang['anggaran_pendapatan'] ?? 0 ?>, <?= $dataPendapatanPenumpang['jumlah_penumpang_anggaran'] ?? 0 ?>],
+                backgroundColor: 'rgba(75, 192, 192, 0.7)',
+                borderRadius: 4,
+                barPercentage: 0.5,
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: {
+                position: 'top',
+                labels: {
+                    font: {
+                        size: 12
+                    }
+                }
+            },
+            datalabels: {
+                anchor: 'end',
+                align: 'end',
+                color: '#444',
+                font: {
+                    weight: 'bold',
+                    size: 12
+                },
+                formatter: function(value) {
+                    let num = typeof value === 'string' ? parseFloat(value) : value;
+                    if (num >= 1e12) {
+                        return 'Rp' + (num / 1e12).toFixed(2) + 'T';
+                    } else if (num >= 1e9) {
+                        return 'Rp' + (num / 1e9).toFixed(2) + 'M';
+                    } else if (num >= 1e6) {
+                        return 'Rp' + (num / 1e6).toFixed(2) + 'Jt';
+                    } else if (num >= 1e3) {
+                        return 'Rp' + (num / 1e3).toFixed(2) + 'Rb';
+                    } else {
+                        return 'Rp' + num.toFixed(2);
+                    }
+                }
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                display: false,
+                grid: {
+                    drawTicks: false,
+                    drawBorder: false,
+                    drawOnChartArea: false
+                },
+                ticks: {
+                    display: false,
+                    callback: function(value) {
+                        return '';
+                    }
+                }
+            },
+            x: {
+                ticks: {
+                    font: {
+                        size: 10
+                    }
+                }
+            }
+        }
+    },
+    plugins: [ChartDataLabels]
+});
+chartPendapatanPenumpang.options.scales.y.display = false;
+chartPendapatanPenumpang.options.scales.y.grid.drawTicks = false;
+chartPendapatanPenumpang.options.scales.y.grid.drawBorder = false;
+chartPendapatanPenumpang.options.scales.y.grid.drawOnChartArea = false;
+chartPendapatanPenumpang.options.scales.y.ticks.display = false;
+chartPendapatanPenumpang.update();
+
+// Chart baru: Pendapatan & Volume Barang
+const ctxPendapatanVolume = document.getElementById('chartPendapatanVolume').getContext('2d');
+const chartPendapatanVolume = new Chart(ctxPendapatanVolume, {
+    type: 'bar',
+    data: {
+        labels: ['Pendapatan', 'Volume'],
+        datasets: [
+            {
+                label: 'Previous',
+                data: [<?= $dataPendapatanVolume['realisasi_pendapatan'] ?? 0 ?>, <?= $dataPendapatanVolume['volume_barang'] ?? 0 ?>],
+                backgroundColor: 'rgba(255, 99, 132, 0.7)',
+                borderRadius: 4,
+                barPercentage: 0.5,
+            },
+            {
+                label: 'Program',
+                data: [<?= $dataPendapatanVolume['anggaran_pendapatan'] ?? 0 ?>, <?= $dataPendapatanVolume['volume_barang_anggaran'] ?? 0 ?>],
+                backgroundColor: 'rgba(75, 192, 192, 0.7)',
+                borderRadius: 4,
+                barPercentage: 0.5,
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: {
+                position: 'top',
+                labels: {
+                    font: {
+                        size: 12
+                    }
+                }
+            },
+            datalabels: {
+                anchor: 'end',
+                align: 'end',
+                color: '#444',
+                font: {
+                    weight: 'bold',
+                    size: 12
+                },
+                formatter: function(value) {
+                    let num = typeof value === 'string' ? parseFloat(value) : value;
+                    if (num >= 1e12) {
+                        return 'Rp' + (num / 1e12).toFixed(2) + 'T';
+                    } else if (num >= 1e9) {
+                        return 'Rp' + (num / 1e9).toFixed(2) + 'M';
+                    } else if (num >= 1e6) {
+                        return 'Rp' + (num / 1e6).toFixed(2) + 'Jt';
+                    } else if (num >= 1e3) {
+                        return 'Rp' + (num / 1e3).toFixed(2) + 'Rb';
+                    } else {
+                        return 'Rp' + num.toFixed(2);
+                    }
+                }
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                display: false,
+                grid: {
+                    drawTicks: false,
+                    drawBorder: false,
+                    drawOnChartArea: false
+                },
+                ticks: {
+                    display: false,
+                    callback: function(value) {
+                        let num = typeof value === 'string' ? parseFloat(value) : value;
+                        if (num >= 1e12) {
+                            return 'Rp' + (num / 1e12).toFixed(2) + 'T';
+                        } else if (num >= 1e9) {
+                            return 'Rp' + (num / 1e9).toFixed(2) + 'M';
+                        } else if (num >= 1e6) {
+                            return 'Rp' + (num / 1e6).toFixed(2) + 'Jt';
+                        } else if (num >= 1e3) {
+                            return 'Rp' + (num / 1e3).toFixed(2) + 'Rb';
+                        } else {
+                            return 'Rp' + num.toFixed(2);
+                        }
+                    }
+                }
+            },
+            x: {
+                ticks: {
+                    font: {
+                        size: 10
+                    }
+                }
+            }
+        }
+    },
+    plugins: [ChartDataLabels]
+});
+
+const ctxPendapatanAsset = document.getElementById('chartPendapatanAsset').getContext('2d');
+const chartPendapatanAsset = new Chart(ctxPendapatanAsset, {
+    type: 'bar',
+    data: {
+        labels: ['Kinerja Kontrak', 'Pendapatan', 'Beban'],
+        datasets: [
+            {
+                label: 'Previous',
+                data: [<?= $dataPendapatanAsset['realisasi_kinerja'] ?? 0 ?>, <?= $dataPendapatanAsset['realisasi_pendapatan'] ?? 0 ?>, <?= $dataBebanAsset['realisasi_beban'] ?? 0 ?>],
+                backgroundColor: 'rgba(255, 99, 132, 0.7)',
+                borderRadius: 4,
+                barPercentage: 0.5,
+            },
+            {
+                label: 'Program',
+                data: [<?= $dataPendapatanAsset['anggaran_kinerja'] ?? 0 ?>, <?= $dataPendapatanAsset['anggaran_pendapatan'] ?? 0 ?>, <?= $dataBebanAsset['anggaran_beban'] ?? 0 ?>],
+                backgroundColor: 'rgba(75, 192, 192, 0.7)',
+                borderRadius: 4,
+                barPercentage: 0.5,
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: {
+                position: 'top',
+                labels: {
+                    font: {
+                        size: 12
+                    }
+                }
+            },
+            datalabels: {
+                anchor: 'end',
+                align: 'end',
+                color: '#444',
+                font: {
+                    weight: 'bold',
+                    size: 12
+                },
+                formatter: function(value) {
+                    let num = typeof value === 'string' ? parseFloat(value) : value;
+                    if (num >= 1e12) {
+                        return 'Rp' + (num / 1e12).toFixed(2) + 'T';
+                    } else if (num >= 1e9) {
+                        return 'Rp' + (num / 1e9).toFixed(2) + 'M';
+                    } else if (num >= 1e6) {
+                        return 'Rp' + (num / 1e6).toFixed(2) + 'Jt';
+                    } else if (num >= 1e3) {
+                        return 'Rp' + (num / 1e3).toFixed(2) + 'Rb';
+                    } else {
+                        return 'Rp' + num.toFixed(2);
+                    }
+                }
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                display: false,
+                grid: {
+                    drawTicks: false,
+                    drawBorder: false,
+                    drawOnChartArea: false
+                },
+                ticks: {
+                    display: false,
+                    callback: function(value) {
+                        let num = typeof value === 'string' ? parseFloat(value) : value;
+                        if (num >= 1e12) {
+                            return 'Rp' + (num / 1e12).toFixed(2) + 'T';
+                        } else if (num >= 1e9) {
+                            return 'Rp' + (num / 1e9).toFixed(2) + 'M';
+                        } else if (num >= 1e6) {
+                            return 'Rp' + (num / 1e6).toFixed(2) + 'Jt';
+                        } else if (num >= 1e3) {
+                            return 'Rp' + (num / 1e3).toFixed(2) + 'Rb';
+                        } else {
+                            return 'Rp' + num.toFixed(2);
+                        }
+                    }
+                }
+            },
+            x: {
+                ticks: {
+                    font: {
+                        size: 10
+                    }
+                }
+            }
+        }
+    },
+    plugins: [ChartDataLabels]
+});
+</script>
