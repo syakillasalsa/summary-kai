@@ -48,7 +48,7 @@
 
    * Tempatkan folder ini di `htdocs/` jika menggunakan XAMPP
    * Akses di browser:
-     `http://localhost/summary-kai/login.php`
+     `http://localhost/summary-kai-master/login.php`
 
 ---
 
