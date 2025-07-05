@@ -1,4 +1,8 @@
+Berikut versi yang sudah **dirapikan** dan siap langsung **copy-paste** ke GitHub README (`README.md`) tanpa error format:
 
+---
+
+````markdown
 # 📊 Summary‑KAI
 
 Aplikasi sederhana berbasis PHP untuk mencatat dan menganalisis laporan keuangan (pendapatan, beban, laba rugi) dengan antarmuka web yang mudah digunakan.
@@ -94,3 +98,6 @@ MIT License – bebas digunakan dan dimodifikasi
 
 ---
 
+Silakan copy seluruh isi di atas dan tempel ke `README.md` di GitHub.  
+Kalau kamu ingin tambahan seperti gambar preview atau badge GitHub (stars, forks, dsb.), tinggal bilang ya!
+```
